@@ -45,6 +45,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path != "/hooks/deploy":
             self._send(404)
             return
+        if self.headers.get("Expect", "").lower() == "100-continue":
+            self.send_response_only(100)
+            self.end_headers()
         try:
             length = int(self.headers.get("Content-Length", 0))
         except ValueError:

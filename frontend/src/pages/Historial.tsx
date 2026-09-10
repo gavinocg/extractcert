@@ -92,7 +92,7 @@ export default function Historial() {
                   <th className="px-2 py-2">Extraído</th>
                   <th className="px-2 py-2">Páginas</th>
                   <th className="px-2 py-2">Estado</th>
-                  {isAdmin && <th className="px-2 py-2">Usuario</th>}
+                  <th className="px-2 py-2">Usuario</th>
                   <th className="px-2 py-2">Fecha</th>
                 </tr>
               </thead>
@@ -118,7 +118,7 @@ export default function Historial() {
                         {r.estado === 'rehecho' ? 're-extraído' : 'realizado'}
                       </span>
                     </td>
-                    {isAdmin && <td className="px-2 py-2">{r.username}</td>}
+                    <td className="px-2 py-2">{r.username}</td>
                     <td className="px-2 py-2">{r.created_at ?? '—'}</td>
                   </tr>
                 ))}

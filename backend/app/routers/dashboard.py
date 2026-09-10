@@ -54,27 +54,32 @@ def dashboard(
             "nombre": f,
             "ruta": ruta_completa,
             "username": None,
+            "nombre_usuario": None,
             "fecha": None,
             "error": None,
         }
         if err:
-            base_item["error"] = {"id": err.id, "observacion": err.observacion, "username": None}
+            base_item["error"] = {"id": err.id, "observacion": err.observacion, "username": None, "nombre": None}
         if reg:
             base_item.update({"estado": reg.estado, "extraccion_id": reg.id, "destino_path": reg.destino_path, "pagina_inicio": reg.pagina_inicio, "pagina_fin": reg.pagina_fin, "fecha": reg.created_at.isoformat() if reg.created_at else None})
         else:
             base_item.update({"estado": "pendiente", "extraccion_id": None, "destino_path": None, "pagina_inicio": None, "pagina_fin": None, "fecha": err.updated_at.isoformat() if err and err.updated_at else None})
         items_all.append(base_item)
 
-    user_map = {u.id: u.username for u in db.query(User).all()}
+    user_map = {u.id: u for u in db.query(User).all()}
     for it in items_all:
         if it["extraccion_id"] is not None:
             reg = extraidos_map.get(it["ruta"])
             if reg:
-                it["username"] = user_map.get(reg.user_id)
+                u = user_map.get(reg.user_id)
+                it["username"] = u.username if u else None
+                it["nombre_usuario"] = (u.nombre or None) if u else None
         if it.get("error"):
             er = errores_map.get(it["ruta"])
             if er:
-                it["error"]["username"] = user_map.get(er.user_id)
+                u = user_map.get(er.user_id)
+                it["error"]["username"] = u.username if u else None
+                it["error"]["nombre"] = (u.nombre or None) if u else None
 
     items_all.sort(key=lambda it: _natsort_key(it["nombre"]))
 

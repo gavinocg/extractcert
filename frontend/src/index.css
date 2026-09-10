@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+:root {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f1f5f9;
+}
+
+.page-box {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  color: #334155;
+  user-select: none;
+}
+.page-box:hover {
+  background: #e2e8f0;
+}
+.page-box.inicio,
+.page-box.fin {
+  background: #dc2626;
+  color: #fff;
+  border-color: #b91c1c;
+}

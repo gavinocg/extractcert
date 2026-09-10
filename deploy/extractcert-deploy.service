@@ -1,0 +1,8 @@
+[Unit]
+Description=ExtractCert auto-deploy de respaldo (rama prod)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/extractcert/deploy/deploy-prod.sh

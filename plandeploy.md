@@ -37,5 +37,24 @@ restringido a `192.168.1.0/24`.
 - BD: solo se añadió uso sobre `db_extract_py` existente; no se crea ni borra nada.
 - El resto de servicios queda intacto.
 
-Artefactos listos en `deploy/`: `extractcert.service`, `nginx-extractcert.conf`
-(solo referencia), `.env.example`, `deploy.sh`, `MIGRATION_CHECKLIST.md`.
+Artefactos listos en `deploy/`: `extractcert.service`, `.env.example`,
+`MIGRATION_CHECKLIST.md`, `webhook.py`, `deploy-prod.sh`,
+`extractcert-webhook.service`, `extractcert-deploy.{service,timer}`.
+
+## Despliegue continuo dev -> prod -> servidor
+Cada push a `prod` despliega solo:
+
+1. **Flujo de release (en local)**: merge `dev` -> `main` -> `prod`,
+   `npm run build` en `frontend/`, `git add -f frontend/dist`, commit y
+   `git push origin prod` (`dist/` está ignorado salvo release).
+2. **GitHub -> servidor**: webhook `https://extractcert.rpcayambe.gob.ec/hooks/deploy`
+   (evento push, secreto HMAC en repo Settings > Webhooks). Apache proxifica
+   `/hooks/deploy` a `127.0.0.1:9000` sin restricción de IP; el receptor
+   `webhook.py` verifica firma y rama `refs/heads/prod`, responde 202 y
+   ejecuta `deploy-prod.sh` en fondo.
+3. **`deploy-prod.sh`**: fetch, fast-forward, `pip install` si cambió
+   `requirements.txt`, restart, healthcheck (`/` y `/docs`), rollback al
+   commit previo ante fallo.
+4. **Respaldo**: timer `extractcert-deploy.timer` cada 30 min por si un
+   webhook no llega. `/opt/extractcert` es repo git en rama `prod`
+   (`.env`, `.venv` y `storage/` sin versionar, se conservan).

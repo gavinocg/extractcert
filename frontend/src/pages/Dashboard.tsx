@@ -28,7 +28,15 @@ interface Item {
   pagina_inicio: number | null
   pagina_fin: number | null
   username: string | null
+  fecha: string | null
   error: { id: number; observacion: string; username: string | null } | null
+}
+
+function formatoFecha(iso: string | null): string {
+  if (!iso) return '—'
+  const m = iso.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/)
+  if (!m) return iso
+  return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}`
 }
 
 interface Dash {
@@ -250,36 +258,53 @@ export default function Dashboard() {
               <div className="text-sm text-slate-400">Sin PDFs en esta carpeta.</div>
             ) : (
               <>
-                <ul className="space-y-1">
-                  {dash.items.map((it) => {
-                    const pendiente = it.estado === 'pendiente'
-                    const hasError = !!it.error
-                    const realizado = !pendiente && !hasError
-                    return (
-                      <li key={it.ruta} className={`flex items-center justify-between gap-2 rounded px-2 py-1.5 ${hasError ? 'bg-red-50' : realizado ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}>
-                        <span className="flex min-w-0 items-center gap-2 truncate text-sm">
-                          {hasError && <input type="checkbox" checked={selected.includes(it.error!.id)} onChange={() => toggleSel(it.error!.id)} />}
-                          <span className={hasError ? 'text-red-600' : pendiente ? 'text-slate-300' : 'text-emerald-600'}>{hasError ? '⚠' : pendiente ? '○' : '✓'}</span>
-                          <span className={hasError ? 'text-red-700' : pendiente ? 'text-slate-700' : 'text-emerald-800'}>📄 {it.nombre}</span>
-                          {hasError ? <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700">Error en digital</span> : !pendiente && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">{it.estado === 'rehecho' ? 're-extraído' : 'realizado'}</span>}
-                        </span>
-                        <span className="flex shrink-0 items-center gap-1">
-                          {hasError && (
-                            <>
-                              <button onClick={() => setErrorTarget(it)} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-white">Ver error</button>
-                              <button onClick={() => corregir(it)} className="rounded bg-emerald-600 px-2 py-1 text-xs text-white hover:bg-emerald-700">Corregido</button>
-                            </>
-                          )}
-                          {pendiente && !hasError ? (
-                            <button onClick={() => setExtraerTarget({ ruta: it.ruta, error: it.error })} className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700">Extraer</button>
-                          ) : !hasError ? (
-                            <button onClick={() => setExtraerTarget({ ruta: it.ruta, ini: it.pagina_inicio ?? 0, fin: it.pagina_fin ?? 0, extraccionId: it.extraccion_id ?? 0, reextra: true, error: it.error })} className="rounded border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50">Volver a extraer</button>
-                          ) : null}
-                        </span>
-                      </li>
-                    )
-                  })}
-                </ul>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-slate-400">
+                      <th className="px-2 py-1">Archivo</th>
+                      <th className="px-2 py-1">Usuario</th>
+                      <th className="px-2 py-1">Fecha</th>
+                      <th className="px-2 py-1">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dash.items.map((it) => {
+                      const pendiente = it.estado === 'pendiente'
+                      const hasError = !!it.error
+                      const realizado = !pendiente && !hasError
+                      const usuario = it.username ?? it.error?.username ?? '—'
+                      return (
+                        <tr key={it.ruta} className={`${hasError ? 'bg-red-50' : realizado ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}>
+                          <td className="max-w-[220px] px-2 py-1.5">
+                            <span className="flex min-w-0 items-center gap-2 truncate">
+                              {hasError && <input type="checkbox" checked={selected.includes(it.error!.id)} onChange={() => toggleSel(it.error!.id)} />}
+                              <span className={hasError ? 'text-red-600' : pendiente ? 'text-slate-300' : 'text-emerald-600'}>{hasError ? '⚠' : pendiente ? '○' : '✓'}</span>
+                              <span className={hasError ? 'truncate text-red-700' : pendiente ? 'truncate text-slate-700' : 'truncate text-emerald-800'}>📄 {it.nombre}</span>
+                              {hasError ? <span className="shrink-0 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700">Error en digital</span> : !pendiente && <span className="shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">{it.estado === 'rehecho' ? 're-extraído' : 'realizado'}</span>}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap px-2 py-1.5 text-slate-600">{usuario}</td>
+                          <td className="whitespace-nowrap px-2 py-1.5 text-slate-600">{formatoFecha(it.fecha)}</td>
+                          <td className="px-2 py-1.5">
+                            <span className="flex shrink-0 items-center gap-1">
+                              {hasError && (
+                                <>
+                                  <button onClick={() => setErrorTarget(it)} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-white">Ver error</button>
+                                  <button onClick={() => corregir(it)} className="rounded bg-emerald-600 px-2 py-1 text-xs text-white hover:bg-emerald-700">Corregido</button>
+                                </>
+                              )}
+                              {pendiente && !hasError ? (
+                                <button onClick={() => setExtraerTarget({ ruta: it.ruta, error: it.error })} className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700">Extraer</button>
+                              ) : !hasError ? (
+                                <button onClick={() => setExtraerTarget({ ruta: it.ruta, ini: it.pagina_inicio ?? 0, fin: it.pagina_fin ?? 0, extraccionId: it.extraccion_id ?? 0, reextra: true, error: it.error })} className="rounded border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50">Volver a extraer</button>
+                              ) : null}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
                 {dash.total > dash.tam && (
                   <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-sm">
                     <span className="text-xs text-slate-400">

@@ -28,8 +28,9 @@ interface Item {
   pagina_inicio: number | null
   pagina_fin: number | null
   username: string | null
+  nombre_usuario: string | null
   fecha: string | null
-  error: { id: number; observacion: string; username: string | null } | null
+  error: { id: number; observacion: string; username: string | null; nombre: string | null } | null
 }
 
 function formatoFecha(iso: string | null): string {
@@ -194,15 +195,17 @@ export default function Dashboard() {
                   {dirs.map((d) => {
                     const s = dirsStats.find((x) => x.nombre === d)
                     const isFinal = s && s.total > 0
+                    const destino = path ? `${path}/${d}` : d
                     return (
-                      <tr key={d} className="border-t border-slate-100 align-top">
+                      <tr
+                        key={d}
+                        onClick={() => cargar(destino)}
+                        className="cursor-pointer border-t border-slate-100 align-top hover:bg-slate-50"
+                      >
                         <td className="px-2 py-1.5">
-                          <button
-                            onClick={() => cargar(path ? `${path}/${d}` : d)}
-                            className="flex items-center gap-2 text-left hover:underline"
-                          >
-                            <span className="text-amber-500">□</span> <span className="truncate">{d}</span>
-                          </button>
+                          <span className="flex items-center gap-2 text-left">
+                            <span className="text-amber-500">□</span> <span className="truncate hover:underline">{d}</span>
+                          </span>
                           {isFinal && (
                             <div className="ml-6 text-[11px] text-slate-400">
                               {s!.realizados} realizado · {s!.errores} error · {s!.pendientes} pendiente · {s!.total} total
@@ -262,7 +265,7 @@ export default function Dashboard() {
                   <thead>
                     <tr className="text-left text-xs text-slate-400">
                       <th className="px-2 py-1">Archivo</th>
-                      <th className="px-2 py-1">Usuario</th>
+                      <th className="px-2 py-1">Nombre</th>
                       <th className="px-2 py-1">Fecha</th>
                       <th className="px-2 py-1">Acción</th>
                     </tr>
@@ -272,7 +275,7 @@ export default function Dashboard() {
                       const pendiente = it.estado === 'pendiente'
                       const hasError = !!it.error
                       const realizado = !pendiente && !hasError
-                      const usuario = it.username ?? it.error?.username ?? '—'
+                      const usuario = it.nombre_usuario || it.error?.nombre || it.username || it.error?.username || '—'
                       return (
                         <tr key={it.ruta} className={`${hasError ? 'bg-red-50' : realizado ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}>
                           <td className="max-w-[220px] px-2 py-1.5">

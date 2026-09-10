@@ -34,10 +34,11 @@ interface Props {
   onPage?: (page: number, numPages: number) => void
   onError?: (message: string) => void
   vertical?: boolean
+  zoomRueda?: boolean
 }
 
 const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
-  { seleccion, fit, url, ini, fin, onSeleccion, onPage, onError, vertical },
+  { seleccion, fit, url, ini, fin, onSeleccion, onPage, onError, vertical, zoomRueda },
   ref,
 ) {
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -54,6 +55,9 @@ const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
   const rotRef = useRef(0)
   const [pageOrder, setPageOrder] = useState<number[]>([])
   const dragSrcRef = useRef<HTMLButtonElement | null>(null)
+  const renderTaskRef = useRef(new Map<HTMLCanvasElement, { cancel(): void }>())
+  const [paniendo, setPaniendo] = useState(false)
+  const panRef = useRef({ activo: false, x: 0, y: 0, left: 0, top: 0 })
 
   useEffect(() => {
     if (numPages > 0 && pageOrder.length !== numPages) {
@@ -159,13 +163,22 @@ const handleDragEnd = useCallback(() => {
         ctx.fillRect(0, 0, canvas.width, canvas.height)
       }
       try {
-        await (pageObj.render({ canvas, viewport } as never) as { promise: Promise<void> }).promise
+        renderTaskRef.current.get(canvas)?.cancel()
+      } catch {
+        /* sin tarea previa */
+      }
+      const task = pageObj.render({ canvas, viewport } as never) as unknown as { promise: Promise<void>; cancel(): void }
+      renderTaskRef.current.set(canvas, task)
+      try {
+        await task.promise
       } catch (e) {
         if (ctx) {
           ctx.fillStyle = '#fff'
           ctx.fillRect(0, 0, canvas.width, canvas.height)
         }
         throw e
+      } finally {
+        if (renderTaskRef.current.get(canvas) === task) renderTaskRef.current.delete(canvas)
       }
     },
     [fit, vertical, zoom],
@@ -284,6 +297,44 @@ const handleDragEnd = useCallback(() => {
   }, [])
 
   useEffect(() => {
+    if (!zoomRueda) return
+    const el = wrapRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const delta = e.deltaY < 0 ? 5 : -5
+      setZoom((z) => Math.min(200, Math.max(25, z + delta)))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [zoomRueda])
+
+  const finPan = useCallback(() => {
+    panRef.current.activo = false
+    setPaniendo(false)
+  }, [])
+
+  const inicioPan = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!zoomRueda || e.pointerType !== 'mouse' || e.button !== 0) return
+      const el = wrapRef.current
+      if (!el) return
+      panRef.current = { activo: true, x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop }
+      setPaniendo(true)
+      el.setPointerCapture(e.pointerId)
+    },
+    [zoomRueda],
+  )
+
+  const moverPan = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const p = panRef.current
+    const el = wrapRef.current
+    if (!p.activo || !el) return
+    el.scrollLeft = p.left - (e.clientX - p.x)
+    el.scrollTop = p.top - (e.clientY - p.y)
+  }, [])
+
+  useEffect(() => {
     canvasMapRef.current.clear()
     if (url) void cargar(url)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -295,9 +346,10 @@ const handleDragEnd = useCallback(() => {
       const id = requestAnimationFrame(() => void dibujarVertical(pdfRef.current!))
       return () => cancelAnimationFrame(id)
     }
-    const id = requestAnimationFrame(() => void ver(1))
+    const id = requestAnimationFrame(() => void ver(page))
     return () => cancelAnimationFrame(id)
-  }, [cargando, numPages, vertical, dibujarVertical, zoom])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargando, numPages, vertical])
 
   useEffect(() => {
     if (!pdfRef.current || numPages === 0 || cargando) return
@@ -395,7 +447,16 @@ const handleDragEnd = useCallback(() => {
         </button>
       </div>
 
-      <div ref={wrapRef} onWheel={handleWheel} className="flex-1 overflow-auto p-2" style={{ minHeight: 360 }}>
+      <div
+        ref={wrapRef}
+        onWheel={zoomRueda ? undefined : handleWheel}
+        onPointerDown={inicioPan}
+        onPointerMove={moverPan}
+        onPointerUp={finPan}
+        onPointerCancel={finPan}
+        className={`flex-1 overflow-auto p-2 ${zoomRueda ? (paniendo ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
+        style={{ minHeight: 360 }}
+      >
         {cargando ? (
           <div className="flex h-full min-h-[300px] items-center justify-center text-slate-400">
             Cargando PDF…
@@ -421,8 +482,9 @@ const handleDragEnd = useCallback(() => {
       </div>
 
       {seleccion && (
-        <div className="border-t border-slate-200 px-3 py-2 text-sm font-medium text-slate-600">
-          {selLabel}
+        <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2 text-sm font-medium text-slate-600">
+          <span>{selLabel}</span>
+          {zoomRueda && <span className="text-xs font-normal text-slate-400">Rueda = zoom · Arrastra para mover</span>}
         </div>
       )}
     </div>

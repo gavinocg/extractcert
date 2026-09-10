@@ -126,7 +126,7 @@ export default function ExtraerModal({ ruta, ini = 0, fin = 0, extraccionId = 0,
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-hidden p-3">
-              <PdfViewer ref={viewerRef} key={original} seleccion fit={false} url={original} ini={ini} fin={fin} onSeleccion={setPred} onError={(m) => toast(m, 'error')} />
+              <PdfViewer ref={viewerRef} key={original} seleccion fit={false} url={original} ini={ini} fin={fin} onSeleccion={setPred} onError={(m) => toast(m, 'error')} zoomRueda />
             </div>
             <div className="flex justify-end border-t border-slate-200 px-5 py-3">
               <button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">Cerrar</button>

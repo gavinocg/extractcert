@@ -21,10 +21,17 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String(60), unique=True, nullable=False)
+    nombre: Mapped[str] = mapped_column(String(100), default="", server_default="", nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     rol: Mapped[str] = mapped_column(
         Enum("usuario", "administrador", name="rol"),
         default="usuario",
+        nullable=False,
+    )
+    estado: Mapped[str] = mapped_column(
+        Enum("activo", "inactivo", name="estado_usuario"),
+        default="activo",
+        server_default="activo",
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)

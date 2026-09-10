@@ -14,12 +14,18 @@ router = APIRouter(prefix="/api/usuarios", tags=["usuarios"])
 
 class UsuarioIn(BaseModel):
     username: str
+    nombre: str = ""
     rol: str = "usuario"
+    estado: str = "activo"
     password: str = ""
 
 
 def _rol_valido(rol: str) -> str:
     return rol if rol in ("usuario", "administrador") else "usuario"
+
+
+def _estado_valido(estado: str) -> str:
+    return estado if estado in ("activo", "inactivo") else "activo"
 
 
 @router.get("")
@@ -38,7 +44,9 @@ def listar(
         {
             "id": u.id,
             "username": u.username,
+            "nombre": u.nombre,
             "rol": u.rol,
+            "estado": u.estado,
             "extracciones": cuenta,
         }
         for u, cuenta in filas
@@ -61,8 +69,10 @@ def crear(
 
     u = User(
         username=body.username.strip(),
+        nombre=body.nombre.strip(),
         password_hash=security.hash_password(body.password),
         rol=_rol_valido(body.rol),
+        estado=_estado_valido(body.estado),
     )
     db.add(u)
     db.commit()
@@ -82,8 +92,12 @@ def actualizar(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuario no existe.")
     if not body.username.strip():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "El usuario es obligatorio.")
+    if user_id == user.id and _estado_valido(body.estado) == "inactivo":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No puede desactivar su propio usuario.")
     u.username = body.username.strip()
+    u.nombre = body.nombre.strip()
     u.rol = _rol_valido(body.rol)
+    u.estado = _estado_valido(body.estado)
     if body.password:
         u.password_hash = security.hash_password(body.password)
     db.commit()

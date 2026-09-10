@@ -4,7 +4,7 @@ import { useAuth } from '../store/auth'
 import CambiarPassword from './CambiarPassword'
 
 const nav = [
-  { to: '/', label: 'Dashboard', icon: 'M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10' },
+  { to: '/', label: 'Bandeja', icon: 'M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10' },
   { to: '/historial', label: 'Historial', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
   { to: '/errores', label: 'Errores', icon: 'M12 9v2m0 4h.01M10.3 4.3a8 8 0 013.4 0l.6 1.7 1.8-.5a8 8 0 012.4 2.4l-.5 1.8 1.7.6a8 8 0 010 3.4l-1.7.6.5 1.8a8 8 0 01-2.4 2.4l-1.8-.5-.6 1.7a8 8 0 01-3.4 0l-.6-1.7-1.8.5a8 8 0 01-2.4-2.4l.5-1.8-1.7-.6a8 8 0 010-3.4l1.7-.6-.5-1.8a8 8 0 012.4-2.4l1.8.5.6-1.7z' },
   { to: '/contactos', label: 'Contactos', icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87M16 3.13a4 4 0 010 7.75' },

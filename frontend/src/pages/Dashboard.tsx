@@ -129,7 +129,7 @@ export default function Dashboard() {
 
   return (
     <div>
-      <h1 className="mb-1 text-2xl font-bold text-slate-800">Dashboard</h1>
+      <h1 className="mb-1 text-2xl font-bold text-slate-800">Bandeja</h1>
       <p className="mb-4 text-sm text-slate-500">Navega las carpetas y extrae certificados.</p>
 
       {dash && (
@@ -169,43 +169,57 @@ export default function Dashboard() {
       {cargando && !dash ? (
         <div className="text-slate-500">Cargando…</div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="flex flex-col gap-4">
           <div className="rounded-xl bg-white p-4 shadow-sm">
             <div className="mb-3 text-sm font-semibold text-slate-700">Carpetas</div>
 {dirs.length === 0 ? (
               <div className="text-sm text-slate-400">Sin subdirectorios.</div>
             ) : (
-              <ul className="space-y-1">
-                {dirs.map((d) => {
-                  const s = dirsStats.find((x) => x.nombre === d)
-                  const isFinal = s && s.total > 0
-                  return (
-                    <li key={d}>
-                      <button
-                        onClick={() => cargar(path ? `${path}/${d}` : d)}
-                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-slate-100"
-                      >
-                        <span className="text-amber-500">□</span> <span className="flex-1 truncate">{d}</span>
-                        {isFinal && (
-                          <span className="ml-auto flex shrink-0 items-center gap-2">
-                            <span className="flex h-2 w-24 shrink-0 overflow-hidden rounded-full bg-slate-200">
-                              {s!.pctRealizado > 0 && <span className="h-full shrink-0 bg-emerald-500" style={{ width: `${s!.pctRealizado}%` }} />}
-                              {s!.pctError > 0 && <span className="h-full shrink-0 bg-red-500" style={{ width: `${s!.pctError}%` }} />}
-                              {s!.pctPendiente > 0 && <span className="h-full shrink-0 bg-slate-300" style={{ width: `${s!.pctPendiente}%` }} />}
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-slate-400">
+                    <th className="px-2 py-1">Directorio</th>
+                    <th className="px-2 py-1">Avance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dirs.map((d) => {
+                    const s = dirsStats.find((x) => x.nombre === d)
+                    const isFinal = s && s.total > 0
+                    return (
+                      <tr key={d} className="border-t border-slate-100 align-top">
+                        <td className="px-2 py-1.5">
+                          <button
+                            onClick={() => cargar(path ? `${path}/${d}` : d)}
+                            className="flex items-center gap-2 text-left hover:underline"
+                          >
+                            <span className="text-amber-500">□</span> <span className="truncate">{d}</span>
+                          </button>
+                          {isFinal && (
+                            <div className="ml-6 text-[11px] text-slate-400">
+                              {s!.realizados} realizado · {s!.errores} error · {s!.pendientes} pendiente · {s!.total} total
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-2 py-1.5">
+                          {isFinal ? (
+                            <span className="flex items-center justify-start gap-2">
+                              <span className="flex h-2 w-32 shrink-0 overflow-hidden rounded-full bg-slate-200">
+                                {s!.pctRealizado > 0 && <span className="h-full shrink-0 bg-emerald-500" style={{ width: `${s!.pctRealizado}%` }} />}
+                                {s!.pctError > 0 && <span className="h-full shrink-0 bg-red-500" style={{ width: `${s!.pctError}%` }} />}
+                                {s!.pctPendiente > 0 && <span className="h-full shrink-0 bg-slate-300" style={{ width: `${s!.pctPendiente}%` }} />}
+                              </span>
+                              <span className="shrink-0 text-xs font-medium whitespace-nowrap text-emerald-700">{s!.pctRealizado}% ({s!.errores} errores, {s!.pendientes} pendientes)</span>
                             </span>
-                            <span className="shrink-0 text-right text-xs font-medium whitespace-nowrap text-emerald-700">{s!.pctRealizado}% ({s!.errores} errores, {s!.pendientes} pendientes)</span>
-                          </span>
-                        )}
-                      </button>
-                      {isFinal && (
-                        <div className="ml-6 text-[11px] text-slate-400">
-                          {s!.realizados} realizado · {s!.errores} error · {s!.pendientes} pendiente · {s!.total} total
-                        </div>
-                      )}
-                    </li>
-                  )
-                })}
-              </ul>
+                          ) : (
+                            <span className="text-xs text-slate-300">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             )}
             
 
@@ -282,46 +296,6 @@ export default function Dashboard() {
                   </div>
                 )}
               </>
-            )}
-          </div>
-
-          <div className="rounded-xl bg-white p-4 shadow-sm">
-            <div className="mb-3 text-sm font-semibold text-slate-700">Realizados</div>
-            {!dash || dash.realizados.length === 0 ? (
-              <div className="text-sm text-slate-400">Sin extracciones en esta carpeta.</div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-slate-400">
-                    <th className="py-1 pr-2">Archivo</th>
-                    <th className="px-2 py-1">Págs</th>
-                    <th className="px-2 py-1">Estado</th>
-                    <th className="px-2 py-1">Usuario</th>
-                    <th className="px-2 py-1">Acción</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dash.realizados.map((r) => (
-                    <tr key={r.id} className="border-t border-slate-100">
-                      <td className="max-w-[160px] truncate py-1.5 pr-2"><a href={`/api/pdf/extraido?ruta=${encodeURIComponent(r.destino_path)}`} target="_blank" rel="noreferrer" className="text-red-600 hover:underline">{r.destino}</a></td>
-                      <td className="px-2 py-1.5">{r.pagina_inicio}–{r.pagina_fin}</td>
-                      <td className="px-2 py-1.5"><span className={r.estado === 'rehecho' ? 'rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700' : 'rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700'}>{r.estado === 'rehecho' ? 're-extraído' : 'realizado'}</span></td>
-                      <td className="px-2 py-1.5">{r.username}</td>
-                      <td className="px-2 py-1.5"><button onClick={() => setExtraerTarget({ ruta: r.original_path, ini: r.pagina_inicio, fin: r.pagina_fin, extraccionId: r.id, reextra: true })} className="rounded border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50">Re-extraer</button></td>
-
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            {dash && dash.total_realizados > dash.tam && (
-              <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-sm">
-                <span className="text-xs text-slate-400">{(() => { const desde = (dash.pagina - 1) * dash.tam + 1; const hasta = Math.min(dash.pagina * dash.tam, dash.total_realizados); return `Mostrando ${desde}–${hasta} de ${dash.total_realizados} · página ${dash.pagina}` })()}</span>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => void cargar(path, dash.pagina - 1)} disabled={dash.pagina <= 1} className="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100 disabled:opacity-40">‹ Anterior</button>
-                  <button onClick={() => void cargar(path, dash.pagina + 1)} disabled={dash.pagina * dash.tam >= dash.total_realizados} className="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100 disabled:opacity-40">Siguiente ›</button>
-                </div>
-              </div>
             )}
           </div>
         </div>

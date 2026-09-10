@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..core import security
-from ..core.deps import get_current_user
+from ..core.deps import get_current_user, require_csrf
 from ..db.database import get_db
 from ..db.models import User
 
@@ -67,3 +67,36 @@ def logout(
 @router.get("/me")
 def me(user: User = Depends(get_current_user)):
     return {"id": user.id, "username": user.username, "rol": user.rol}
+
+
+class PasswordIn(BaseModel):
+    actual: str
+    nueva: str
+
+
+@router.post("/password")
+def cambiar_password(
+    body: PasswordIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_csrf),
+):
+    if not security.verify_password(body.actual, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="La contraseña actual es incorrecta.",
+        )
+    nueva = body.nueva.strip()
+    if len(nueva) < 4:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La nueva contraseña debe tener al menos 4 caracteres.",
+        )
+    if security.verify_password(nueva, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La nueva contraseña debe ser distinta a la actual.",
+        )
+    user.password_hash = security.hash_password(nueva)
+    db.commit()
+    return {"ok": True}

@@ -1,0 +1,20 @@
+[Unit]
+Description=ExtractCert FastAPI (API + SPA)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=extractcert
+Group=extractcert
+WorkingDirectory=/opt/extractcert/backend
+EnvironmentFile=/opt/extractcert/backend/.env
+ExecStart=/opt/extractcert/backend/.venv/bin/uvicorn app.main:app --app-dir /opt/extractcert/backend --host 127.0.0.1 --port 8000 --workers 2
+Restart=on-failure
+RestartSec=5
+# Límites para convivir con otros servicios del servidor
+MemoryMax=1G
+CPUQuota=150%
+
+[Install]
+WantedBy=multi-user.target

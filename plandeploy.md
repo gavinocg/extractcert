@@ -44,9 +44,13 @@ Artefactos listos en `deploy/`: `extractcert.service`, `.env.example`,
 ## Despliegue continuo dev -> prod -> servidor
 Cada push a `prod` despliega solo:
 
-1. **Flujo de release (en local)**: merge `dev` -> `main` -> `prod`,
-   `npm run build` en `frontend/`, `git add -f frontend/dist`, commit y
-   `git push origin prod` (`dist/` está ignorado salvo release).
+1. **Flujo de release (en local)**: merge `dev` -> `main` -> `prod`.
+   Luego **reemplazo limpio** de `dist/` (un `add` normal acumula bundles
+   viejos y deja `index.html` desactualizado):
+   `git checkout prod`, `git rm -rq frontend/dist`, borrar `frontend/dist`,
+   `node node_modules/vite/bin/vite.js build` en `frontend/` (vía node
+   directo, no el shim `.bin`), copiar el `dist/` fresco, `git add -f
+   frontend/dist`, commit y `git push origin prod`.
 2. **GitHub -> servidor**: webhook `https://extractcert.rpcayambe.gob.ec/hooks/deploy`
    (evento push, secreto HMAC en repo Settings > Webhooks). Apache proxifica
    `/hooks/deploy` a `127.0.0.1:9000` sin restricción de IP; el receptor

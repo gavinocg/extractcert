@@ -31,8 +31,10 @@ def _seed() -> None:
             db.add(
                 User(
                     username="admin",
+                    nombre="Administrador",
                     password_hash=security.hash_password("Admin123"),
                     rol="administrador",
+                    estado="activo",
                 )
             )
         for clave, valor in (

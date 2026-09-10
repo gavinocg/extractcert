@@ -29,6 +29,8 @@ def get_current_user(
     user = db.get(User, int(user_id))
     if not user:
         raise FORBIDDEN
+    if user.estado != "activo":
+        raise FORBIDDEN
     return user
 
 

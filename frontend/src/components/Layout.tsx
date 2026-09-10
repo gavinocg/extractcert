@@ -15,7 +15,7 @@ export default function Layout() {
   const isAdmin = user?.rol === 'administrador'
   const isVisor = location.pathname === '/visor'
 
-  const items = isAdmin ? [...nav, { to: '/usuarios', label: 'Usuarios', icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87M16 3.13a4 4 0 010 7.75M12 12a4 4 0 100-8 4 4 0 000 8z' }, { to: '/config', label: 'Configuración', icon: 'M10.3 4.3a8 8 0 013.4 0l.6 1.7 1.8-.5a8 8 0 012.4 2.4l-.5 1.8 1.7.6a8 8 0 010 3.4l-1.7.6.5 1.8a8 8 0 01-2.4 2.4l-1.8-.5-.6 1.7a8 8 0 01-3.4 0l-.6-1.7-1.8.5a8 8 0 01-2.4-2.4l.5-1.8-1.7-.6a8 8 0 010-3.4l1.7-.6-.5-1.8a8 8 0 012.4-2.4l1.8.5.6-1.7zM12 15a3 3 0 100-6 3 3 0 000 6z' }] : nav
+  const items = isAdmin ? [...nav, { to: '/observaciones', label: 'Observaciones', icon: 'M4 6h16M4 12h16M4 18h10' }, { to: '/usuarios', label: 'Usuarios', icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87M16 3.13a4 4 0 010 7.75M12 12a4 4 0 100-8 4 4 0 000 8z' }, { to: '/config', label: 'Configuración', icon: 'M10.3 4.3a8 8 0 013.4 0l.6 1.7 1.8-.5a8 8 0 012.4 2.4l-.5 1.8 1.7.6a8 8 0 010 3.4l-1.7.6.5 1.8a8 8 0 01-2.4 2.4l-1.8-.5-.6 1.7a8 8 0 01-3.4 0l-.6-1.7-1.8.5a8 8 0 01-2.4-2.4l.5-1.8-1.7-.6a8 8 0 010-3.4l1.7-.6-.5-1.8a8 8 0 012.4-2.4l1.8.5.6-1.7zM12 15a3 3 0 100-6 3 3 0 000 6z' }] : nav
 
   const onLogout = async () => {
     await logout()

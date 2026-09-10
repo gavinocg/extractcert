@@ -31,6 +31,7 @@ class OrigIn(BaseModel):
 class GuardarIn(OrigIn):
     reextra: int = 0
     extraccion_id: int = 0
+    nombre: str = ""
 
 
 def _validar_origen(ruta: str, db: Session) -> str:
@@ -101,7 +102,13 @@ def guardar(
             os.makedirs(repo, exist_ok=True)
         if not os.access(repo, os.W_OK):
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Destino no escribible.")
-        destino = fs.unir(repo, generar_nombre_sin_colision(repo, os.path.basename(original)))
+        pedido = os.path.basename(body.nombre.strip()) if body.nombre else ""
+        if pedido and not pedido.lower().endswith(".pdf"):
+            pedido += ".pdf"
+        if len(pedido) > 255:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nombre demasiado largo.")
+        base = pedido or os.path.basename(original)
+        destino = fs.unir(repo, generar_nombre_sin_colision(repo, base))
 
     rot2 = int(body.rotacion) % 360 if hasattr(body, 'rotacion') else 0
     extraer_paginas(original, body.inicio, body.fin, destino, rotacion=rot2)

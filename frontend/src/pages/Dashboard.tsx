@@ -240,12 +240,13 @@ export default function Dashboard() {
                   {dash.items.map((it) => {
                     const pendiente = it.estado === 'pendiente'
                     const hasError = !!it.error
+                    const realizado = !pendiente && !hasError
                     return (
-                      <li key={it.ruta} className={`flex items-center justify-between gap-2 rounded px-2 py-1.5 ${hasError ? 'bg-red-50' : 'hover:bg-slate-50'}`}>
+                      <li key={it.ruta} className={`flex items-center justify-between gap-2 rounded px-2 py-1.5 ${hasError ? 'bg-red-50' : realizado ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}>
                         <span className="flex min-w-0 items-center gap-2 truncate text-sm">
                           {hasError && <input type="checkbox" checked={selected.includes(it.error!.id)} onChange={() => toggleSel(it.error!.id)} />}
                           <span className={hasError ? 'text-red-600' : pendiente ? 'text-slate-300' : 'text-emerald-600'}>{hasError ? '⚠' : pendiente ? '○' : '✓'}</span>
-                          <span className={hasError ? 'text-red-700' : pendiente ? 'text-slate-700' : 'text-slate-500'}>📄 {it.nombre}</span>
+                          <span className={hasError ? 'text-red-700' : pendiente ? 'text-slate-700' : 'text-emerald-800'}>📄 {it.nombre}</span>
                           {hasError ? <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700">Error en digital</span> : !pendiente && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">{it.estado === 'rehecho' ? 're-extraído' : 'realizado'}</span>}
                         </span>
                         <span className="flex shrink-0 items-center gap-1">

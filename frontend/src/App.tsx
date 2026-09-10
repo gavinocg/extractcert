@@ -12,6 +12,7 @@ const Usuarios = lazy(() => import('./pages/Usuarios'))
 const Config = lazy(() => import('./pages/Config'))
 const Errores = lazy(() => import('./pages/Errores'))
 const Contactos = lazy(() => import('./pages/Contactos'))
+const Observaciones = lazy(() => import('./pages/Observaciones'))
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading, load } = useAuth()
@@ -52,6 +53,7 @@ function RouteLoader() {
           <Route path="historial" element={<Historial />} />
           <Route path="errores" element={<Errores />} />
           <Route path="contactos" element={<Contactos />} />
+          <Route path="observaciones" element={<Observaciones />} />
           <Route path="usuarios" element={<Usuarios />} />
           <Route path="config" element={<Config />} />
         </Route>

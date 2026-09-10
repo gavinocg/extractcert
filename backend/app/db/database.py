@@ -32,3 +32,10 @@ def init_db() -> None:
     from . import models  # noqa: F401  (registra los modelos)
 
     Base.metadata.create_all(bind=engine)
+    from sqlalchemy import inspect, text
+
+    if "observaciones" in inspect(engine).get_table_names():
+        columnas = {c["name"] for c in inspect(engine).get_columns("observaciones")}
+        if "orden" not in columnas:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE observaciones ADD COLUMN orden INTEGER NOT NULL DEFAULT 0"))

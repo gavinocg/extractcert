@@ -401,7 +401,7 @@ const handleDragEnd = useCallback(() => {
     void ver(i)
   }
 
-  const selLabel = `Inicio: ${inicio || '—'} · Fin: ${finS || '—'}`
+  const selLabel = inicio && finS ? `Página ${inicio} a ${finS}` : inicio ? `Página ${inicio} a …` : 'Seleccione páginas'
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl bg-white shadow-sm">
@@ -439,11 +439,6 @@ const handleDragEnd = useCallback(() => {
         ) : (
           <span className="flex-1 text-center text-xs text-slate-500">
             Página {numPages ? page : '…'} de {numPages || '…'}
-            {gestoRueda && (
-              <span className="ml-2 text-slate-400">
-                {zoomRueda ? '· Rueda = zoom · Arrastra para mover' : '· Ctrl+rueda = zoom · Arrastra para mover'}
-              </span>
-            )}
           </span>
         )}
 
@@ -491,13 +486,8 @@ const handleDragEnd = useCallback(() => {
       </div>
 
       {seleccion && (
-        <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2 text-sm font-medium text-slate-600">
-          <span>{selLabel}</span>
-          {gestoRueda && (
-            <span className="text-xs font-normal text-slate-400">
-              {zoomRueda ? 'Rueda = zoom · Arrastra para mover' : 'Ctrl+rueda = zoom · Arrastra para mover'}
-            </span>
-          )}
+        <div className="border-t border-slate-200 px-3 py-2 text-sm font-medium text-slate-600">
+          {selLabel}
         </div>
       )}
     </div>

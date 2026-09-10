@@ -80,6 +80,15 @@ class TramiteError(Base):
     user: Mapped[User] = relationship()
 
 
+class Observacion(Base):
+    __tablename__ = "observaciones"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    descripcion: Mapped[str] = mapped_column(String(500), unique=True, nullable=False)
+    orden: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+
 class Contacto(Base):
     __tablename__ = "contactos"
     __table_args__ = (Index("idx_contacto_email", "email"),)

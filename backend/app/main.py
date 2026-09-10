@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from .core.config import settings
 from .db.database import SessionLocal, init_db
 from .core import security
-from .db.models import Setting, User
+from .db.models import Observacion, Setting, User
 from .routers import (
     auth,
     contactos,
@@ -16,6 +16,7 @@ from .routers import (
     errores,
     extraccion,
     historial,
+    observaciones,
     pdf,
     settings as settings_router,
     tree,
@@ -40,6 +41,15 @@ def _seed() -> None:
         ):
             if not db.get(Setting, clave):
                 db.add(Setting(clave=clave, valor=valor))
+        if not db.query(Observacion).first():
+            for orden, texto in (
+                (10, "Faltan páginas"),
+                (20, "Documento ilegible"),
+                (30, "Trámite duplicado"),
+                (40, "Certificado incompleto"),
+                (50, "Firma faltante"),
+            ):
+                db.add(Observacion(descripcion=texto, orden=orden))
         db.commit()
     finally:
         db.close()
@@ -64,6 +74,7 @@ app.include_router(usuarios.router)
 app.include_router(settings_router.router)
 app.include_router(errores.router)
 app.include_router(contactos.router)
+app.include_router(observaciones.router)
 
 # En producción, servir el build de Vite (frontend/dist).
 _DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"

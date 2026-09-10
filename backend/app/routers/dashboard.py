@@ -54,14 +54,15 @@ def dashboard(
             "nombre": f,
             "ruta": ruta_completa,
             "username": None,
+            "fecha": None,
             "error": None,
         }
         if err:
             base_item["error"] = {"id": err.id, "observacion": err.observacion, "username": None}
         if reg:
-            base_item.update({"estado": reg.estado, "extraccion_id": reg.id, "destino_path": reg.destino_path, "pagina_inicio": reg.pagina_inicio, "pagina_fin": reg.pagina_fin})
+            base_item.update({"estado": reg.estado, "extraccion_id": reg.id, "destino_path": reg.destino_path, "pagina_inicio": reg.pagina_inicio, "pagina_fin": reg.pagina_fin, "fecha": reg.created_at.isoformat() if reg.created_at else None})
         else:
-            base_item.update({"estado": "pendiente", "extraccion_id": None, "destino_path": None, "pagina_inicio": None, "pagina_fin": None})
+            base_item.update({"estado": "pendiente", "extraccion_id": None, "destino_path": None, "pagina_inicio": None, "pagina_fin": None, "fecha": err.updated_at.isoformat() if err and err.updated_at else None})
         items_all.append(base_item)
 
     user_map = {u.id: u.username for u in db.query(User).all()}

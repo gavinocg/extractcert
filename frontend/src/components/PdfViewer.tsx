@@ -35,10 +35,11 @@ interface Props {
   onError?: (message: string) => void
   vertical?: boolean
   zoomRueda?: boolean
+  zoomCtrl?: boolean
 }
 
 const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
-  { seleccion, fit, url, ini, fin, onSeleccion, onPage, onError, vertical, zoomRueda },
+  { seleccion, fit, url, ini, fin, onSeleccion, onPage, onError, vertical, zoomRueda, zoomCtrl },
   ref,
 ) {
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -292,22 +293,25 @@ const handleDragEnd = useCallback(() => {
   const handleWheel = useCallback((e: React.WheelEvent) => {
     if (!e.ctrlKey) return
     e.preventDefault()
-    const delta = e.deltaY < 0 ? 5 : -5
+    const delta = e.deltaY < 0 ? 10 : -10
     setZoom((z) => Math.min(200, Math.max(25, z + delta)))
   }, [])
 
+  const gestoRueda = zoomRueda || zoomCtrl
+
   useEffect(() => {
-    if (!zoomRueda) return
+    if (!gestoRueda) return
     const el = wrapRef.current
     if (!el) return
     const onWheel = (e: WheelEvent) => {
+      if (zoomCtrl && !e.ctrlKey) return
       e.preventDefault()
-      const delta = e.deltaY < 0 ? 5 : -5
+      const delta = e.deltaY < 0 ? 10 : -10
       setZoom((z) => Math.min(200, Math.max(25, z + delta)))
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [zoomRueda])
+  }, [gestoRueda, zoomCtrl])
 
   const finPan = useCallback(() => {
     panRef.current.activo = false
@@ -316,14 +320,14 @@ const handleDragEnd = useCallback(() => {
 
   const inicioPan = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      if (!zoomRueda || e.pointerType !== 'mouse' || e.button !== 0) return
+      if (!gestoRueda || e.pointerType !== 'mouse' || e.button !== 0) return
       const el = wrapRef.current
       if (!el) return
       panRef.current = { activo: true, x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop }
       setPaniendo(true)
       el.setPointerCapture(e.pointerId)
     },
-    [zoomRueda],
+    [gestoRueda],
   )
 
   const moverPan = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -435,6 +439,11 @@ const handleDragEnd = useCallback(() => {
         ) : (
           <span className="flex-1 text-center text-xs text-slate-500">
             Página {numPages ? page : '…'} de {numPages || '…'}
+            {gestoRueda && (
+              <span className="ml-2 text-slate-400">
+                {zoomRueda ? '· Rueda = zoom · Arrastra para mover' : '· Ctrl+rueda = zoom · Arrastra para mover'}
+              </span>
+            )}
           </span>
         )}
 
@@ -449,12 +458,12 @@ const handleDragEnd = useCallback(() => {
 
       <div
         ref={wrapRef}
-        onWheel={zoomRueda ? undefined : handleWheel}
+        onWheel={gestoRueda ? undefined : handleWheel}
         onPointerDown={inicioPan}
         onPointerMove={moverPan}
         onPointerUp={finPan}
         onPointerCancel={finPan}
-        className={`flex-1 overflow-auto p-2 ${zoomRueda ? (paniendo ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
+        className={`flex-1 overflow-auto p-2 ${gestoRueda ? (paniendo ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
         style={{ minHeight: 360 }}
       >
         {cargando ? (
@@ -484,7 +493,11 @@ const handleDragEnd = useCallback(() => {
       {seleccion && (
         <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2 text-sm font-medium text-slate-600">
           <span>{selLabel}</span>
-          {zoomRueda && <span className="text-xs font-normal text-slate-400">Rueda = zoom · Arrastra para mover</span>}
+          {gestoRueda && (
+            <span className="text-xs font-normal text-slate-400">
+              {zoomRueda ? 'Rueda = zoom · Arrastra para mover' : 'Ctrl+rueda = zoom · Arrastra para mover'}
+            </span>
+          )}
         </div>
       )}
     </div>

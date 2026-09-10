@@ -139,7 +139,7 @@ export default function ExtraerModal({ ruta, ini = 0, fin = 0, extraccionId = 0,
               <button onClick={guardar} disabled={busyGuardar} className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">{busyGuardar ? 'Guardando…' : '✓ Sí, guardar archivo'}</button>
             </div>
             <div className="flex-1 overflow-auto p-3">
-              <PdfViewer seleccion={false} fit vertical url={prevUrl} onError={(m) => toast(m, 'error')} />
+              <PdfViewer seleccion={false} fit vertical url={prevUrl} onError={(m) => toast(m, 'error')} zoomCtrl />
             </div>
           </>
         )}

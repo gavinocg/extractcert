@@ -26,8 +26,15 @@ if git diff --name-only "$PREV" "$REMOTE" | grep -q backend/requirements.txt; th
 fi
 
 systemctl restart extractcert
-sleep 12
-if curl -sf -m 15 "$URL" -o /dev/null && curl -sf -m 15 "${URL}docs" -o /dev/null; then
+OK=0
+for i in $(seq 1 12); do
+  sleep 10
+  if curl -sf -m 10 "$URL" -o /dev/null && curl -sf -m 10 "${URL}docs" -o /dev/null; then
+    OK=1
+    break
+  fi
+done
+if [ "$OK" = "1" ]; then
   logger -t extractcert-deploy "deploy OK $REMOTE"
 else
   logger -t extractcert-deploy "deploy FALLO, rollback a $PREV"

@@ -37,7 +37,7 @@ def tree(
         pdfs_in = fs.listar_pdfs(real_dir)
         total = len(pdfs_in)
         if total == 0:
-            dirs_stats.append({"nombre": d, "total": 0, "realizados": 0, "errores": 0, "pendientes": 0, "pctRealizado": 0, "pctError": 0, "pctPendiente": 0})
+            dirs_stats.append({"nombre": d, "total": 0, "realizados": 0, "errores": 0, "pendientes": 0, "pctRealizado": 0, "pctError": 0, "pctPendiente": 0, "pctAvance": 0})
             continue
         pref = fs.normalizar(real_dir) + "/%"
         realizados = db.query(Extraccion).filter(Extraccion.original_path.like(pref)).count()
@@ -53,7 +53,8 @@ def tree(
         pctRealizado = round(realizados * 100 / total) if total else 0
         pctError = round(errores * 100 / total) if total else 0
         pctPendiente = max(0, 100 - pctRealizado - pctError)
-        dirs_stats.append({"nombre": d, "total": total, "realizados": realizados, "errores": errores, "pendientes": pendientes, "pctRealizado": pctRealizado, "pctError": pctError, "pctPendiente": pctPendiente})
+        pctAvance = pctRealizado + pctError
+        dirs_stats.append({"nombre": d, "total": total, "realizados": realizados, "errores": errores, "pendientes": pendientes, "pctRealizado": pctRealizado, "pctError": pctError, "pctPendiente": pctPendiente, "pctAvance": pctAvance})
 
     return {
         "base": base,

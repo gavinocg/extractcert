@@ -67,13 +67,13 @@ export default function Dashboard() {
   const [extraerTarget, setExtraerTarget] = useState<{ ruta: string; ini?: number; fin?: number; extraccionId?: number; reextra?: boolean; error?: { id: number; observacion: string; username: string | null } | null } | null>(null)
   const toast = useToast((s) => s.show)
 
-  const [dirsStats, setDirsStats] = useState<{ nombre: string; total: number; realizados: number; errores: number; pendientes: number; pctRealizado: number; pctError: number; pctPendiente: number }[]>([])
+  const [dirsStats, setDirsStats] = useState<{ nombre: string; total: number; realizados: number; errores: number; pendientes: number; pctRealizado: number; pctError: number; pctPendiente: number; pctAvance: number }[]>([])
 
   const cargar = useCallback(async (ruta: string | null, pg?: number) => {
     setCargando(true)
     setErr('')
     try {
-      const t = await api.get<{ base: string; actual: string; dirs: string[]; dirs_stats: { nombre: string; total: number; realizados: number; errores: number; pendientes: number; pctRealizado: number; pctError: number; pctPendiente: number }[]; pdfs: string[] }>(
+      const t = await api.get<{ base: string; actual: string; dirs: string[]; dirs_stats: { nombre: string; total: number; realizados: number; errores: number; pendientes: number; pctRealizado: number; pctError: number; pctPendiente: number; pctAvance: number }[]; pdfs: string[] }>(
         '/api/tree' + (ruta ? `?path=${encodeURIComponent(ruta)}` : ''),
       )
       setPath(t.actual)
@@ -220,7 +220,7 @@ export default function Dashboard() {
                                 {s!.pctError > 0 && <span className="h-full shrink-0 bg-red-500" style={{ width: `${s!.pctError}%` }} />}
                                 {s!.pctPendiente > 0 && <span className="h-full shrink-0 bg-slate-300" style={{ width: `${s!.pctPendiente}%` }} />}
                               </span>
-                              <span className="shrink-0 text-xs font-medium whitespace-nowrap text-emerald-700">{s!.pctRealizado}% ({s!.errores} errores, {s!.pendientes} pendientes)</span>
+                              <span className="shrink-0 text-xs font-medium whitespace-nowrap text-emerald-700">{s!.pctAvance}% ({s!.errores} errores, {s!.pendientes} pendientes)</span>
                             </span>
                           ) : (
                             <span className="text-xs text-slate-300">—</span>

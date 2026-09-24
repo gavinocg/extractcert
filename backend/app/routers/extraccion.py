@@ -166,6 +166,7 @@ def guardar(
                 pagina_inicio=body.inicio,
                 pagina_fin=body.fin,
                 estado=estado,
+                processed_at=datetime.now(),
             )
             db.add(e)
             db.flush()

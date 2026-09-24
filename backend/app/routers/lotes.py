@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from ..core.deps import get_current_user, require_csrf, require_supervisor
 from ..core.config import settings
 from ..db.database import get_db
-from ..db.models import AssignmentLock, Extraccion, Lote, LoteAsignacionHistorial, TramiteError, User
+from ..db.models import AssignmentLock, Extraccion, Lote, LoteAsignacionHistorial, Notificacion, TramiteError, User
 from ..services import fs, lotes as lote_service
 from ..services.notificaciones import notify_assignment, notify_completion
 from ..services.repo import raiz_origen
@@ -89,7 +89,7 @@ def listar(
     q = db.query(Lote)
     if user.rol == "usuario" or scope == "mine":
         q = q.filter(Lote.operador_id == user.id)
-    elif scope == "supervision" and user.rol in ("supervisor", "administrador"):
+    elif scope in ("supervision", "archived") and user.rol in ("supervisor", "administrador"):
         q = q.filter(Lote.operador_id.is_not(None))
     else:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bandeja no válida.")
@@ -97,6 +97,10 @@ def listar(
     result = [lote_service.serialize(db, lote) for lote in rows]
     if scope == "mine":
         result = [item for item in result if item["estado"] != "notificado"]
+    elif scope == "supervision":
+        result = [item for item in result if item["estado"] != "notificado"]
+    elif scope == "archived":
+        result = [item for item in result if item["estado"] == "notificado"]
     db.commit()
     return result
 
@@ -296,6 +300,96 @@ def historial(
         "notified_at": row.notified_at.isoformat() if row.notified_at else None,
         "motivo": row.motivo,
     } for row in rows]
+
+
+@router.get("/{lote_id}/archive-summary")
+def archive_summary(
+    lote_id: int,
+    user: User = Depends(require_supervisor),
+    db: Session = Depends(get_db),
+):
+    lote = db.get(Lote, lote_id)
+    if not lote:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Lote no encontrado.")
+    serialized = lote_service.serialize(db, lote)
+    if serialized["estado"] != "notificado":
+        raise HTTPException(status.HTTP_409_CONFLICT, "El lote no está archivado.")
+
+    extractions = db.query(Extraccion).filter(Extraccion.lote_id == lote.id).all()
+    errors = db.query(TramiteError).filter(TramiteError.lote_id == lote.id).all()
+    user_ids = {item.user_id for item in extractions} | {item.user_id for item in errors}
+    users = {item.id: item for item in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+    by_user: dict[int, dict] = {}
+    for extraction in extractions:
+        entry = by_user.setdefault(extraction.user_id, {"realizados": 0, "paginas": 0, "errores": 0})
+        entry["realizados"] += 1
+        entry["paginas"] += max(0, extraction.pagina_fin - extraction.pagina_inicio + 1)
+    for error in errors:
+        by_user.setdefault(error.user_id, {"realizados": 0, "paginas": 0, "errores": 0})["errores"] += 1
+
+    history = (
+        db.query(LoteAsignacionHistorial)
+        .filter(LoteAsignacionHistorial.lote_id == lote.id)
+        .order_by(LoteAsignacionHistorial.assigned_at)
+        .all()
+    )
+    history_user_ids = {row.operador_id for row in history} | {row.asignado_por_id for row in history if row.asignado_por_id}
+    history_users = {item.id: item for item in db.query(User).filter(User.id.in_(history_user_ids)).all()} if history_user_ids else {}
+    notifications = (
+        db.query(Notificacion)
+        .filter(Notificacion.lote_id == lote.id)
+        .order_by(Notificacion.created_at)
+        .all()
+    )
+    processed_dates = [item.processed_at for item in extractions if item.processed_at]
+    attention_seconds = None
+    if lote.assigned_at and lote.notified_at:
+        attention_seconds = max(0, int((lote.notified_at - lote.assigned_at).total_seconds()))
+
+    return {
+        "lote": serialized,
+        "resumen": {
+            "extracciones": len(extractions),
+            "reextracciones": sum(1 for item in extractions if item.estado == "rehecho"),
+            "errores": len(errors),
+            "paginas_extraidas": sum(max(0, item.pagina_fin - item.pagina_inicio + 1) for item in extractions),
+            "primer_procesamiento": min(processed_dates).isoformat() if processed_dates else None,
+            "ultimo_procesamiento": max(processed_dates).isoformat() if processed_dates else None,
+            "duracion_atencion_segundos": attention_seconds,
+        },
+        "participantes": [
+            {
+                "id": user_id,
+                "username": users[user_id].username if user_id in users else "usuario eliminado",
+                "nombre": users[user_id].nombre if user_id in users else "",
+                **stats,
+            }
+            for user_id, stats in sorted(by_user.items())
+        ],
+        "historial": [
+            {
+                "id": row.id,
+                "operador": (history_users[row.operador_id].nombre or history_users[row.operador_id].username) if row.operador_id in history_users else "Usuario eliminado",
+                "asignado_por": (history_users[row.asignado_por_id].nombre or history_users[row.asignado_por_id].username) if row.asignado_por_id in history_users else None,
+                "assigned_at": row.assigned_at.isoformat(),
+                "unassigned_at": row.unassigned_at.isoformat() if row.unassigned_at else None,
+                "completed_at": row.completed_at.isoformat() if row.completed_at else None,
+                "notified_at": row.notified_at.isoformat() if row.notified_at else None,
+                "motivo": row.motivo,
+            }
+            for row in history
+        ],
+        "notificaciones": [
+            {
+                "tipo": item.tipo.split(":", 1)[0],
+                "destinatario": item.destinatario,
+                "estado": item.estado,
+                "intentos": item.intentos,
+                "sent_at": item.sent_at.isoformat() if item.sent_at else None,
+            }
+            for item in notifications
+        ],
+    }
 
 
 @router.post("/{lote_id}/liberar")

@@ -15,6 +15,7 @@ const Contactos = lazy(() => import('./pages/Contactos'))
 const Observaciones = lazy(() => import('./pages/Observaciones'))
 const Lotes = lazy(() => import('./pages/Lotes'))
 const Asignar = lazy(() => import('./pages/Asignar'))
+const Archivados = lazy(() => import('./pages/Archivados'))
 
 function RoleGate({ allow, children }: { allow: Array<'usuario' | 'supervisor' | 'administrador'>; children: React.ReactNode }) {
   const user = useAuth((state) => state.user)
@@ -57,6 +58,7 @@ function RouteLoader() {
         >
           <Route index element={<Lotes />} />
           <Route path="supervision" element={<RoleGate allow={['supervisor', 'administrador']}><Lotes supervisionView /></RoleGate>} />
+          <Route path="archivados" element={<RoleGate allow={['supervisor', 'administrador']}><Archivados /></RoleGate>} />
           <Route path="lote" element={<Dashboard />} />
           <Route path="asignar" element={<RoleGate allow={['supervisor', 'administrador']}><Asignar /></RoleGate>} />
           <Route path="visor" element={<Visor />} />

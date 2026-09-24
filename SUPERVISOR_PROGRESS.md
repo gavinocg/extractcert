@@ -166,6 +166,12 @@ Fecha de inicio: 2026-09-24
 - La columna Avance vuelve a mostrarse para todas las carpetas finales.
 - El calculo barre automaticamente PDFs, extracciones y errores aunque la carpeta aun no tenga lote creado.
 
+## Archivados
+
+- Los lotes notificados al 100% salen de Supervision y pasan a Archivados.
+- Archivados es de solo lectura para Supervisor y Administrador.
+- La accion Ver muestra metricas, tiempos, responsables, participacion, historial y notificaciones.
+
 ## Notas de despliegue
 
 - Respaldar MariaDB antes de ejecutar migraciones.

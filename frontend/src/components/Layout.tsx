@@ -21,6 +21,7 @@ export default function Layout() {
 
   const supervisorNav = isSupervisor || isAdmin ? [
     { to: '/supervision', label: 'Bandeja supervisión', icon: 'M4 5h16v14H4zM8 9h8M8 13h5' },
+    { to: '/archivados', label: 'Archivados', icon: 'M4 7h16v12H4zM3 4h18v3H3zM9 11h6' },
     { to: '/asignar', label: 'Asignar', icon: 'M9 12h6m-3-3v6M4 6h16v14H4z' },
   ] : []
   const roleNav = isSupervisor || isAdmin ? nav : nav.filter((item) => item.to !== '/contactos')

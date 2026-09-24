@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
+import ProgressBar from '../components/ProgressBar'
 import { useToast } from '../store/toast'
-import type { Lote, Operador } from '../types/lotes'
+import type { Lote, MetricasLote, Operador } from '../types/lotes'
 
 interface TreeItem {
   nombre: string
@@ -10,6 +11,7 @@ interface TreeItem {
   tiene_hijos: boolean
   total: number
   lote: Lote | null
+  metricas: MetricasLote | null
 }
 
 export default function Asignar() {
@@ -108,13 +110,14 @@ export default function Asignar() {
           <span className="truncate text-slate-500">/{path}</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-sm">
-            <thead><tr className="border-b text-left text-xs uppercase tracking-wide text-slate-400"><th className="px-5 py-3">Carpeta</th><th className="px-4 py-3">Operador</th><th className="px-4 py-3">Archivos</th><th className="px-5 py-3 text-right">Acción</th></tr></thead>
+          <table className="w-full min-w-[900px] text-sm">
+            <thead><tr className="border-b text-left text-xs uppercase tracking-wide text-slate-400"><th className="px-5 py-3">Carpeta</th><th className="px-4 py-3">Operador</th><th className="px-4 py-3">Archivos</th><th className="min-w-64 px-4 py-3">Avance</th><th className="px-5 py-3 text-right">Acción</th></tr></thead>
             <tbody>{items.map((item) => (
               <tr key={item.relative_path} className="border-b border-slate-100 last:border-0">
                 <td className="px-5 py-4"><button disabled={!item.tiene_hijos} onClick={() => void loadTree(item.relative_path)} className={`inline-flex items-center gap-2 font-semibold ${item.tiene_hijos ? 'text-slate-900 hover:text-blue-700' : 'text-slate-700'}`}>{item.tiene_hijos && <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">+</span>}<svg className={`h-5 w-5 shrink-0 ${item.tiene_hijos ? 'text-blue-500' : 'text-amber-500'}`} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.75A1.75 1.75 0 014.75 4h4.19c.46 0 .9.18 1.23.51L11.66 6h7.59A1.75 1.75 0 0121 7.75v9.5A2.75 2.75 0 0118.25 20H5.75A2.75 2.75 0 013 17.25V5.75z" /></svg><span>{item.nombre}</span></button>{item.es_lote && <div className="ml-9 mt-1 text-xs text-emerald-600">Carpeta final</div>}</td>
                 <td className="px-4 py-4"><select disabled={!item.es_lote} value={selected[item.relative_path] || ''} onChange={(event) => setSelected((current) => ({ ...current, [item.relative_path]: Number(event.target.value) }))} className="w-56 rounded-lg border border-slate-300 px-3 py-2 disabled:bg-slate-100"><option value="">Seleccionar operador</option>{operatorOptions(selected[item.relative_path] || 0).map((operator) => <option key={operator.id} value={operator.id}>{operator.nombre || operator.username} (@{operator.username})</option>)}</select></td>
                 <td className="px-4 py-4 font-semibold text-slate-700">{item.es_lote ? item.total : '—'}</td>
+                <td className="px-4 py-4">{item.metricas ? <ProgressBar metricas={item.metricas} /> : <span className="text-slate-300">—</span>}</td>
                 <td className="px-5 py-4 text-right"><div className="flex justify-end gap-2"><button disabled={!item.es_lote || !selected[item.relative_path] || saving === item.relative_path || releasing === item.relative_path} onClick={() => void assign(item)} className="rounded-lg bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:bg-slate-200 disabled:text-slate-400">{saving === item.relative_path ? 'Guardando…' : item.lote?.operador ? 'Reasignar' : 'Asignar'}</button>{item.lote?.operador && <button disabled={releasing === item.relative_path || saving === item.relative_path} onClick={() => void release(item)} className="rounded-lg bg-amber-600 px-4 py-2 font-semibold text-white hover:bg-amber-700 disabled:bg-slate-200 disabled:text-slate-400">{releasing === item.relative_path ? 'Liberando…' : 'Liberar'}</button>}</div></td>
               </tr>
             ))}</tbody>

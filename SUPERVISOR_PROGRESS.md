@@ -161,6 +161,11 @@ Fecha de inicio: 2026-09-24
 - Migraciones locales aplicadas hasta `20260924_08 (head)` sin claves nulas ni duplicadas.
 - Verificacion final: backend 16/16, frontend 11/11, build Vite, sintaxis deploy y smoke HTTP aprobados.
 
+## Avance en Asignar
+
+- La columna Avance vuelve a mostrarse para todas las carpetas finales.
+- El calculo barre automaticamente PDFs, extracciones y errores aunque la carpeta aun no tenga lote creado.
+
 ## Notas de despliegue
 
 - Respaldar MariaDB antes de ejecutar migraciones.

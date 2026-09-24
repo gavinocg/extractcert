@@ -20,8 +20,8 @@ cd C:\laragon\www\extractcert
 - API: http://127.0.0.1:8000  (docs en `/docs`)
 - SPA: http://localhost:5173  (Vite proxifica `/api` → 8000)
 
-Primer arranque crea el venv, instala dependencias y (vía `app/main.py`) crea las tablas
-y siembra el usuario `admin` / `Admin123` y las settings por defecto.
+Primer arranque crea el venv, instala dependencias y siembra las settings por defecto. Antes de
+arrancar una versión nueva, aplique las migraciones desde `backend` con `alembic upgrade head`.
 
 ### `start.ps1` (lanzador / controlador silencioso)
 Levanta backend + frontend **sin ventanas adicionales** (procesos ocultos), espera a que
@@ -54,6 +54,8 @@ cd frontend && npm run dev
 - `DATABASE_URL=mysql+pymysql://root:@localhost:3306/db_extract_py`
 - `SECRET_KEY` (cambiar en producción)
 - `DEFAULT_RAIZ_ORIGEN`, `DEFAULT_RAIZ_REPO` (el admin puede cambiarlas por la web en /config)
+- `APP_URL` (URL incluida en las notificaciones)
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_TLS`, `SMTP_FROM`
 
 ## API principal
 - `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`
@@ -61,6 +63,8 @@ cd frontend && npm run dev
 - `GET /api/pdf/{original|extraido|temp}?ruta=`
 - `POST /api/extracciones/preview`, `POST /api/extracciones/guardar`
 - `GET /api/historial?usuario=&pagina=&tam=` (paginado), `CRUD /api/usuarios`, `GET/PUT /api/settings`
+- `GET /api/lotes`, `GET /api/lotes/arbol`, `POST /api/lotes/asignar`
+- `POST /api/lotes/{id}/notificar-finalizacion`
 
 Auth por cookie httpOnly (JWT) + doble envío CSRF (`X-CSRF-Token`).
 
@@ -77,11 +81,13 @@ Los certificados escaneados usan imágenes **JBIG2**, que pdf.js v6 solo decodif
 - En producción el build ya incluye esos assets (`dist/pdfjs-wasm/`).
 
 ## Producción (Ubuntu 24.04 LAMP)
-1. `cd frontend && npm install && npm run build` (genera `frontend/dist`).
-2. FastAPI ya sirve `frontend/dist` (StaticFiles montado al final). Ejecutar con uvicorn/gunicorn bajo systemd.
-3. nginx: proxy `/api` → `127.0.0.1:8000`; el resto lo sirve FastAPI (SPA).
-4. `.env` con credenciales MySQL y rutas `/mnt/...` (origen/repo).
-5. Bloquear acceso web a `storage/`.
+1. Respaldar MariaDB.
+2. `cd backend && .venv/bin/alembic upgrade head`.
+3. `cd frontend && npm install && npm run build` (genera `frontend/dist`).
+4. FastAPI sirve `frontend/dist`; ejecutar bajo systemd.
+5. nginx: proxy `/api` → `127.0.0.1:8000`; el resto lo sirve FastAPI.
+6. Configurar `.env`, incluyendo SMTP y `APP_URL`.
+7. Bloquear acceso web a `storage/`.
 
 ## Probar backend
 ```bash

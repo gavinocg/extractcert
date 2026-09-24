@@ -21,9 +21,9 @@ def historial(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    es_admin = user.rol == "administrador"
+    es_supervisor = user.rol in ("supervisor", "administrador")
     q = db.query(Extraccion, User.username).join(User, Extraccion.user_id == User.id)
-    if not es_admin:
+    if not es_supervisor:
         q = q.filter(Extraccion.user_id == user.id)
     elif usuario:
         q = q.filter(Extraccion.user_id == usuario)
@@ -52,7 +52,7 @@ def historial(
     ]
 
     usuarios = []
-    if es_admin:
+    if es_supervisor:
         usuarios = [
             {"id": u.id, "username": u.username}
             for u in db.query(User).order_by(User.username)

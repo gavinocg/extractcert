@@ -53,3 +53,7 @@ def test_listar_dirs_y_pdfs(tmp_path: Path):
 def test_natsort():
     assert fs._natsort(["10", "2", "1"]) == ["1", "2", "10"]
     assert fs._natsort(["a10", "a2", "a1"]) == ["a1", "a2", "a10"]
+
+
+def test_like_prefix_escapa_metacaracteres():
+    assert fs.like_prefix(r"C:\raiz\100%\a_b\x\y") == "C:/raiz/100\\%/a\\_b/x/y/%"

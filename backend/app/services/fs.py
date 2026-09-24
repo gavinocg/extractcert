@@ -8,6 +8,17 @@ def normalizar(r: str) -> str:
     return (r or "").replace("\\", "/").rstrip("/")
 
 
+def like_prefix(path: str) -> str:
+    """Construye un patrón LIKE literal para los descendientes de path."""
+    escaped = normalizar(path).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return escaped + "/%"
+
+
+def filename_key(name: str) -> str:
+    """Respeta la sensibilidad a mayúsculas que usa el filesystem local."""
+    return os.path.normcase(name)
+
+
 def unir(base: str, parte: str) -> str:
     b = normalizar(base)
     p = normalizar(str(parte)).lstrip("/")
@@ -16,6 +27,7 @@ def unir(base: str, parte: str) -> str:
 
 def _resolver(p: str) -> str:
     p = p.replace("\\", "/").strip()
+    is_unc = p.startswith("//")
     drive = ""
     m = re.match(r"^([A-Za-z]:)/", p)
     if m:
@@ -30,21 +42,27 @@ def _resolver(p: str) -> str:
                 parts.pop()
             continue
         parts.append(seg)
-    return drive + "/" + "/".join(parts)
+    prefix = drive + "/" if drive else "//" if is_unc else "/"
+    return prefix + "/".join(parts)
 
 
 def confinar(raiz: str, ruta: str) -> str | None:
-    """Valida (léxicamente) que 'ruta' esté dentro de 'raiz'. Devuelve la ruta canónica o None."""
+    """Valida que la ruta real esté dentro de la raíz, incluyendo enlaces simbólicos."""
     if not ruta:
         return None
     cr = _resolver(normalizar(raiz)).rstrip("/")
     ru = _resolver(normalizar(str(ruta))).rstrip("/")
     if not cr or not ru:
         return None
-    dentro = ru == cr or ru.startswith(cr + "/")
+    real_root = os.path.normcase(os.path.realpath(cr))
+    real_path = os.path.normcase(os.path.realpath(ru))
+    try:
+        dentro = os.path.commonpath((real_root, real_path)) == real_root
+    except ValueError:
+        dentro = False
     if not dentro:
         return None
-    canon = os.path.normpath(ru)
+    canon = os.path.realpath(ru)
     return normalizar(canon)
 
 

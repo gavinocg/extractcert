@@ -21,12 +21,20 @@ $pidF = Join-Path $stateDir "frontend.pid"
 
 function Test-Port([int]$port) {
     foreach ($addr in @('127.0.0.1', '::1')) {
+        $c = $null
         try {
-            $c = New-Object Net.Sockets.TcpClient
+            $family = if ($addr -eq '::1') {
+                [Net.Sockets.AddressFamily]::InterNetworkV6
+            } else {
+                [Net.Sockets.AddressFamily]::InterNetwork
+            }
+            $c = New-Object Net.Sockets.TcpClient($family)
             $c.Connect($addr, $port)
-            $c.Close()
             return $true
-        } catch { }
+        } catch {
+        } finally {
+            if ($null -ne $c) { $c.Dispose() }
+        }
     }
     return $false
 }

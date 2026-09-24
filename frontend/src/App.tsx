@@ -13,6 +13,13 @@ const Config = lazy(() => import('./pages/Config'))
 const Errores = lazy(() => import('./pages/Errores'))
 const Contactos = lazy(() => import('./pages/Contactos'))
 const Observaciones = lazy(() => import('./pages/Observaciones'))
+const Lotes = lazy(() => import('./pages/Lotes'))
+const Asignar = lazy(() => import('./pages/Asignar'))
+
+function RoleGate({ allow, children }: { allow: Array<'usuario' | 'supervisor' | 'administrador'>; children: React.ReactNode }) {
+  const user = useAuth((state) => state.user)
+  return user && allow.includes(user.rol) ? <>{children}</> : <Navigate to="/" replace />
+}
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading, load } = useAuth()
@@ -48,14 +55,17 @@ function RouteLoader() {
             </AuthGate>
           }
         >
-          <Route index element={<Dashboard />} />
+          <Route index element={<Lotes />} />
+          <Route path="supervision" element={<RoleGate allow={['supervisor', 'administrador']}><Lotes supervisionView /></RoleGate>} />
+          <Route path="lote" element={<Dashboard />} />
+          <Route path="asignar" element={<RoleGate allow={['supervisor', 'administrador']}><Asignar /></RoleGate>} />
           <Route path="visor" element={<Visor />} />
           <Route path="historial" element={<Historial />} />
           <Route path="errores" element={<Errores />} />
-          <Route path="contactos" element={<Contactos />} />
-          <Route path="observaciones" element={<Observaciones />} />
-          <Route path="usuarios" element={<Usuarios />} />
-          <Route path="config" element={<Config />} />
+          <Route path="contactos" element={<RoleGate allow={['supervisor', 'administrador']}><Contactos /></RoleGate>} />
+          <Route path="observaciones" element={<RoleGate allow={['administrador']}><Observaciones /></RoleGate>} />
+          <Route path="usuarios" element={<RoleGate allow={['administrador']}><Usuarios /></RoleGate>} />
+          <Route path="config" element={<RoleGate allow={['administrador']}><Config /></RoleGate>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

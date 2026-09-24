@@ -25,7 +25,7 @@ interface Hist {
 
 export default function Historial() {
   const { user } = useAuth()
-  const isAdmin = user?.rol === 'administrador'
+  const isAdmin = user?.rol === 'administrador' || user?.rol === 'supervisor'
   const [data, setData] = useState<Hist | null>(null)
   const [usuario, setUsuario] = useState(0)
   const [pagina, setPagina] = useState(1)

@@ -43,6 +43,15 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+def require_supervisor(user: User = Depends(get_current_user)) -> User:
+    if user.rol not in ("supervisor", "administrador"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Se requieren privilegios de supervisor.",
+        )
+    return user
+
+
 def require_csrf(
     request: Request,
     csrf_token: str | None = Cookie(default=None),

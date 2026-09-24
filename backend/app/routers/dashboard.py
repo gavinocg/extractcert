@@ -9,6 +9,7 @@ from ..core.deps import get_current_user
 from ..db.database import get_db
 from ..db.models import Extraccion, TramiteError, User
 from ..services import fs
+from ..services.lotes import absolute_path, require_directory_access
 from ..services.repo import raiz_origen, raiz_repo
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
@@ -30,26 +31,33 @@ def dashboard(
 ):
     base = raiz_origen(db)
     ruta = path or base
-    conf = fs.confinar(base, ruta)
+    conf = absolute_path(db, ruta) if path and fs.confinar(base, ruta) is None else fs.confinar(base, ruta)
     if conf is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ruta no permitida.")
     if not os.path.isdir(conf):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "El directorio no existe.")
+    lote = require_directory_access(db, user, conf)
 
-    pref = fs.normalizar(conf) + "/%"
+    pref = fs.like_prefix(conf)
 
-    rows_all = db.query(Extraccion).filter(Extraccion.original_path.like(pref)).all()
-    extraidos_map: dict[str, Extraccion] = {fs.normalizar(r.original_path): r for r in rows_all}
-    errores_all = db.query(TramiteError).filter(TramiteError.original_path.like(pref)).all()
-    errores_map: dict[str, TramiteError] = {fs.normalizar(r.original_path): r for r in errores_all}
+    extraction_filter = Extraccion.original_path.like(pref, escape="\\")
+    error_filter = TramiteError.original_path.like(pref, escape="\\")
+    if lote:
+        extraction_filter = extraction_filter | (Extraccion.lote_id == lote.id)
+        error_filter = error_filter | (TramiteError.lote_id == lote.id)
+    rows_all = db.query(Extraccion).filter(extraction_filter).all()
+    extraidos_map: dict[str, Extraccion] = {fs.filename_key(os.path.basename(fs.normalizar(r.original_path))): r for r in rows_all}
+    errores_all = db.query(TramiteError).filter(error_filter).all()
+    errores_map: dict[str, TramiteError] = {fs.filename_key(os.path.basename(fs.normalizar(r.original_path))): r for r in errores_all}
 
     pdfs = fs.listar_pdfs(conf)
 
     items_all: list[dict] = []
     for f in pdfs:
         ruta_completa = fs.normalizar(os.path.abspath(os.path.join(conf, f)))
-        reg = extraidos_map.get(ruta_completa)
-        err = errores_map.get(ruta_completa)
+        file_key = fs.filename_key(f)
+        reg = extraidos_map.get(file_key)
+        err = errores_map.get(file_key)
         base_item = {
             "nombre": f,
             "ruta": ruta_completa,
@@ -69,13 +77,13 @@ def dashboard(
     user_map = {u.id: u for u in db.query(User).all()}
     for it in items_all:
         if it["extraccion_id"] is not None:
-            reg = extraidos_map.get(it["ruta"])
+            reg = extraidos_map.get(fs.filename_key(it["nombre"]))
             if reg:
                 u = user_map.get(reg.user_id)
                 it["username"] = u.username if u else None
                 it["nombre_usuario"] = (u.nombre or None) if u else None
         if it.get("error"):
-            er = errores_map.get(it["ruta"])
+            er = errores_map.get(fs.filename_key(it["nombre"]))
             if er:
                 u = user_map.get(er.user_id)
                 it["error"]["username"] = u.username if u else None
@@ -84,20 +92,20 @@ def dashboard(
     items_all.sort(key=lambda it: _natsort_key(it["nombre"]))
 
     total = len(items_all)
-    pendientes_count = sum(1 for it in items_all if it["estado"] == "pendiente")
+    pendientes_count = sum(1 for it in items_all if it["estado"] == "pendiente" and not it["error"])
 
-    first_pendiente = next((i for i, it in enumerate(items_all) if it["estado"] == "pendiente"), None)
+    first_pendiente = next((i for i, it in enumerate(items_all) if it["estado"] == "pendiente" and not it["error"]), None)
     pagina_sugerida = (first_pendiente // tam + 1) if first_pendiente is not None else 1
 
     start = (pagina - 1) * tam
     items = items_all[start : start + tam]
 
-    pendientes = [it["nombre"] for it in items_all if it["estado"] == "pendiente"]
+    pendientes = [it["nombre"] for it in items_all if it["estado"] == "pendiente" and not it["error"]]
 
     rows_q = (
         db.query(Extraccion, User.username)
         .join(User, Extraccion.user_id == User.id)
-        .filter(Extraccion.original_path.like(pref))
+        .filter(Extraccion.original_path.like(pref, escape="\\"))
     )
     total_realizados = rows_q.count()
     rows = (

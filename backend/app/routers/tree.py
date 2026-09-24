@@ -8,6 +8,7 @@ from ..core.deps import get_current_user
 from ..db.database import get_db
 from ..db.models import Extraccion, TramiteError, User
 from ..services import fs
+from ..services.lotes import absolute_path, require_directory_access
 from ..services.repo import raiz_origen
 
 router = APIRouter(prefix="/api", tags=["tree"])
@@ -21,11 +22,13 @@ def tree(
 ):
     base = raiz_origen(db)
     ruta = path or base
-    conf = fs.confinar(base, ruta)
+    conf = absolute_path(db, ruta) if path and fs.confinar(base, ruta) is None else fs.confinar(base, ruta)
     if conf is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ruta no permitida.")
     if not os.path.isdir(conf):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "El directorio no existe.")
+    if user.rol == "usuario":
+        require_directory_access(db, user, conf)
 
     dirs = fs.listar_dirs(conf)
     dirs_stats = []
@@ -39,9 +42,18 @@ def tree(
         if total == 0:
             dirs_stats.append({"nombre": d, "total": 0, "realizados": 0, "errores": 0, "pendientes": 0, "pctRealizado": 0, "pctError": 0, "pctPendiente": 0, "pctAvance": 0})
             continue
-        pref = fs.normalizar(real_dir) + "/%"
-        realizados = db.query(Extraccion).filter(Extraccion.original_path.like(pref)).count()
-        errores = db.query(TramiteError).filter(TramiteError.original_path.like(pref)).count()
+        pref = fs.like_prefix(real_dir)
+        file_keys = {fs.filename_key(name) for name in pdfs_in}
+        realizados_set = {
+            fs.filename_key(os.path.basename(path))
+            for (path,) in db.query(Extraccion.original_path).filter(Extraccion.original_path.like(pref, escape="\\")).all()
+        } & file_keys
+        errores_set = {
+            fs.filename_key(os.path.basename(path))
+            for (path,) in db.query(TramiteError.original_path).filter(TramiteError.original_path.like(pref, escape="\\")).all()
+        } & file_keys
+        realizados = len(realizados_set)
+        errores = len(errores_set - realizados_set)
         realizados = min(realizados, total)
         errores = min(errores, total)
         pendientes = max(0, total - realizados - errores)

@@ -1,4 +1,5 @@
 """Modelos ORM."""
+import hashlib
 from datetime import datetime
 
 from sqlalchemy import (
@@ -22,9 +23,10 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String(60), unique=True, nullable=False)
     nombre: Mapped[str] = mapped_column(String(100), default="", server_default="", nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     rol: Mapped[str] = mapped_column(
-        Enum("usuario", "administrador", name="rol"),
+        Enum("usuario", "supervisor", "administrador", name="rol"),
         default="usuario",
         nullable=False,
     )
@@ -41,11 +43,73 @@ class User(Base):
     )
 
 
+class Lote(Base):
+    __tablename__ = "lotes"
+    __table_args__ = (Index("ix_lotes_operador_estado", "operador_id", "estado"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    relative_path: Mapped[str] = mapped_column(String(700), unique=True, nullable=False)
+    nombre: Mapped[str] = mapped_column(String(255), nullable=False)
+    operador_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    asignado_por_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    estado: Mapped[str] = mapped_column(String(30), default="sin_asignar", server_default="sin_asignar", nullable=False)
+    assigned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    notification_token: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    notification_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    operador: Mapped[User | None] = relationship(foreign_keys=[operador_id])
+    asignado_por: Mapped[User | None] = relationship(foreign_keys=[asignado_por_id])
+
+
+class LoteAsignacionHistorial(Base):
+    __tablename__ = "lote_asignaciones_historial"
+    __table_args__ = (Index("ix_lote_historial_lote", "lote_id", "assigned_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lote_id: Mapped[int] = mapped_column(ForeignKey("lotes.id", ondelete="CASCADE"), nullable=False)
+    operador_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    asignado_por_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    assigned_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    unassigned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    motivo: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class Notificacion(Base):
+    __tablename__ = "notificaciones"
+    __table_args__ = (
+        Index("ix_notificaciones_lote_tipo", "lote_id", "tipo"),
+        Index("uq_notificaciones_evento_destinatario", "lote_id", "tipo", "destinatario", unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lote_id: Mapped[int] = mapped_column(ForeignKey("lotes.id", ondelete="CASCADE"), nullable=False)
+    tipo: Mapped[str] = mapped_column(String(100), nullable=False)
+    destinatario: Mapped[str] = mapped_column(String(255), nullable=False)
+    estado: Mapped[str] = mapped_column(String(20), default="pendiente", server_default="pendiente", nullable=False)
+    intentos: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
 class Setting(Base):
     __tablename__ = "settings"
 
     clave: Mapped[str] = mapped_column(String(100), primary_key=True)
     valor: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class AssignmentLock(Base):
+    __tablename__ = "assignment_locks"
+
+    clave: Mapped[str] = mapped_column(String(30), primary_key=True)
 
 
 class Extraccion(Base):
@@ -58,7 +122,14 @@ class Extraccion(Base):
     user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
+    lote_id: Mapped[int | None] = mapped_column(ForeignKey("lotes.id", ondelete="SET NULL"), index=True, nullable=True)
     original_path: Mapped[str] = mapped_column(Text, nullable=False)
+    original_key: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False,
+        default=lambda context: hashlib.sha256(
+            (context.get_current_parameters().get("original_path") or "").replace("\\", "/").rstrip("/").encode("utf-8")
+        ).hexdigest(),
+    )
     destino_path: Mapped[str] = mapped_column(Text, nullable=False)
     pagina_inicio: Mapped[int] = mapped_column(Integer, nullable=False)
     pagina_fin: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -68,6 +139,7 @@ class Extraccion(Base):
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    processed_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
     user: Mapped[User] = relationship(back_populates="extracciones")
 
@@ -81,6 +153,7 @@ class TramiteError(Base):
     archivo: Mapped[str] = mapped_column(String(255), nullable=False)
     observacion: Mapped[str] = mapped_column(Text, nullable=False)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    lote_id: Mapped[int | None] = mapped_column(ForeignKey("lotes.id", ondelete="SET NULL"), index=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 

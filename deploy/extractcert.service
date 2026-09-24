@@ -9,7 +9,7 @@ User=extractcert
 Group=extractcert
 WorkingDirectory=/opt/extractcert/backend
 EnvironmentFile=/opt/extractcert/backend/.env
-ExecStart=/opt/extractcert/backend/.venv/bin/uvicorn app.main:app --app-dir /opt/extractcert/backend --host 127.0.0.1 --port 8000 --workers 2
+ExecStart=/opt/extractcert/backend/.venv/bin/uvicorn app.main:app --app-dir /opt/extractcert/backend --host 127.0.0.1 --port 8000 --workers 1
 Restart=on-failure
 RestartSec=5
 # Límites para convivir con otros servicios del servidor

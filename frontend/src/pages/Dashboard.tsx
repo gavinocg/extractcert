@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import ErrorModal from '../components/ErrorModal'
 import EnviarErroresModal from '../components/EnviarErroresModal'
 import ExtraerModal from '../components/ExtraerModal'
 import { useToast } from '../store/toast'
+import { useAuth } from '../store/auth'
 
 interface Realizado {
   id: number
@@ -55,6 +56,8 @@ interface Dash {
 }
 
 export default function Dashboard() {
+  const user = useAuth((state) => state.user)
+  const canBrowse = user?.rol !== 'usuario'
   const [searchParams] = useSearchParams()
   const [dash, setDash] = useState<Dash | null>(null)
   const [path, setPath] = useState<string | null>(null)
@@ -66,16 +69,19 @@ export default function Dashboard() {
   const [showEnviar, setShowEnviar] = useState(false)
   const [extraerTarget, setExtraerTarget] = useState<{ ruta: string; ini?: number; fin?: number; extraccionId?: number; reextra?: boolean; error?: { id: number; observacion: string; username: string | null } | null } | null>(null)
   const toast = useToast((s) => s.show)
+  const requestId = useRef(0)
 
   const [dirsStats, setDirsStats] = useState<{ nombre: string; total: number; realizados: number; errores: number; pendientes: number; pctRealizado: number; pctError: number; pctPendiente: number; pctAvance: number }[]>([])
 
   const cargar = useCallback(async (ruta: string | null, pg?: number) => {
+    const currentRequest = ++requestId.current
     setCargando(true)
     setErr('')
     try {
       const t = await api.get<{ base: string; actual: string; dirs: string[]; dirs_stats: { nombre: string; total: number; realizados: number; errores: number; pendientes: number; pctRealizado: number; pctError: number; pctPendiente: number; pctAvance: number }[]; pdfs: string[] }>(
         '/api/tree' + (ruta ? `?path=${encodeURIComponent(ruta)}` : ''),
       )
+      if (currentRequest !== requestId.current) return
       setPath(t.actual)
       setDirs(t.dirs)
       setDirsStats(t.dirs_stats ?? [])
@@ -83,20 +89,23 @@ export default function Dashboard() {
       if (t.actual) q.set('path', t.actual)
       if (pg !== undefined) q.set('pagina', String(pg))
       const d = await api.get<Dash>('/api/dashboard?' + q.toString())
+      if (currentRequest !== requestId.current) return
       if (pg === undefined && d.pagina_sugerida !== d.pagina && d.total > d.tam) {
         const q2 = new URLSearchParams()
         q2.set('path', t.actual)
         q2.set('pagina', String(d.pagina_sugerida))
         const d2 = await api.get<Dash>('/api/dashboard?' + q2.toString())
+        if (currentRequest !== requestId.current) return
         setDash(d2)
       } else {
         setDash(d)
       }
       setSelected([])
     } catch (e) {
+      if (currentRequest !== requestId.current) return
       setErr(e instanceof Error ? e.message : 'Error')
     } finally {
-      setCargando(false)
+      if (currentRequest === requestId.current) setCargando(false)
     }
   }, [])
 
@@ -123,6 +132,7 @@ export default function Dashboard() {
     await api.post('/api/errores', { ruta: errorTarget.ruta, observacion: obs })
     toast('Error guardado', 'success')
     void cargar(path, dash?.pagina)
+    window.dispatchEvent(new Event('lotes:changed'))
   }
 
   const corregir = async (it: Item) => {
@@ -130,6 +140,7 @@ export default function Dashboard() {
     await api.del(`/api/errores/${it.error.id}`)
     toast('Marcado como corregido', 'success')
     void cargar(path, dash?.pagina)
+    window.dispatchEvent(new Event('lotes:changed'))
   }
 
   const toggleSel = (id: number) => setSelected((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
@@ -143,10 +154,8 @@ export default function Dashboard() {
 
       {dash && (
         <div className="mb-4 flex flex-wrap items-center gap-1 rounded-lg bg-white px-3 py-2 text-sm shadow-sm">
-          <Link to="/" className="text-slate-600 hover:underline" onClick={() => void cargar(null)}>
-            {dash.origen}
-          </Link>
-          {(() => {
+          {canBrowse ? <Link to="/lote" className="text-slate-600 hover:underline" onClick={() => void cargar(null)}>{dash.origen}</Link> : <span className="font-medium text-slate-700">{path?.split('/').filter(Boolean).at(-1)}</span>}
+          {canBrowse && (() => {
             const base = dash.origen.split('/').filter(Boolean)
             const rel = path ? path.substring(dash.origen.length).split('/').filter(Boolean) : []
             let acc = [...base]
@@ -167,7 +176,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {subir && (
+      {canBrowse && subir && (
         <button onClick={() => cargar(subir)} className="mb-3 text-sm text-slate-600 hover:underline">
           ← Subir un nivel
         </button>
@@ -330,7 +339,7 @@ export default function Dashboard() {
       )}
       {errorTarget && <ErrorModal archivo={errorTarget.nombre} observacionInicial={errorTarget.error?.observacion} onClose={() => setErrorTarget(null)} onSave={guardarError} />}
       {showEnviar && <EnviarErroresModal ids={selected} onClose={() => setShowEnviar(false)} onSent={() => { setShowEnviar(false); toast('Enviado', 'success'); setSelected([]) }} />}
-      {extraerTarget && <ExtraerModal ruta={extraerTarget.ruta} ini={extraerTarget.ini} fin={extraerTarget.fin} extraccionId={extraerTarget.extraccionId} reextra={extraerTarget.reextra} error={extraerTarget.error ?? null} onClose={() => setExtraerTarget(null)} onGuardado={() => void cargar(path, dash?.pagina)} onErrorSaved={() => void cargar(path, dash?.pagina)} />}
+      {extraerTarget && <ExtraerModal ruta={extraerTarget.ruta} ini={extraerTarget.ini} fin={extraerTarget.fin} extraccionId={extraerTarget.extraccionId} reextra={extraerTarget.reextra} error={extraerTarget.error ?? null} onClose={() => setExtraerTarget(null)} onGuardado={() => { void cargar(path, dash?.pagina); window.dispatchEvent(new Event('lotes:changed')) }} onErrorSaved={() => { void cargar(path, dash?.pagina); window.dispatchEvent(new Event('lotes:changed')) }} />}
     </div>
   )
 }

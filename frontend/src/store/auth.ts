@@ -4,7 +4,9 @@ import { api } from '../api/client'
 export interface User {
   id: number
   username: string
-  rol: 'usuario' | 'administrador'
+  nombre: string
+  email: string
+  rol: 'usuario' | 'supervisor' | 'administrador'
 }
 
 interface AuthState {

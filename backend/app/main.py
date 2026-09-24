@@ -16,6 +16,7 @@ from .routers import (
     errores,
     extraccion,
     historial,
+    lotes,
     observaciones,
     pdf,
     settings as settings_router,
@@ -72,6 +73,7 @@ app.include_router(dashboard.router)
 app.include_router(pdf.router)
 app.include_router(extraccion.router)
 app.include_router(historial.router)
+app.include_router(lotes.router)
 app.include_router(usuarios.router)
 app.include_router(settings_router.router)
 app.include_router(errores.router)

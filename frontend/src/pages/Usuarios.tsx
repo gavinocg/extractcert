@@ -8,19 +8,21 @@ interface Usuario {
   id: number
   username: string
   nombre: string
+  email: string
   rol: string
   estado: string
   extracciones: number
 }
 
 export default function Usuarios() {
-  const { user } = useAuth()
+  const { user, load: reloadAuth } = useAuth()
   const navigate = useNavigate()
   const toast = useToast((s) => s.show)
   const [lista, setLista] = useState<Usuario[]>([])
   const [editId, setEditId] = useState(0)
   const [username, setUsername] = useState('')
   const [nombre, setNombre] = useState('')
+  const [email, setEmail] = useState('')
   const [rol, setRol] = useState('usuario')
   const [estado, setEstado] = useState('activo')
   const [password, setPassword] = useState('')
@@ -43,6 +45,7 @@ export default function Usuarios() {
     setEditId(u.id)
     setUsername(u.username)
     setNombre(u.nombre)
+    setEmail(u.email)
     setRol(u.rol)
     setEstado(u.estado)
     setPassword('')
@@ -52,6 +55,7 @@ export default function Usuarios() {
     setEditId(0)
     setUsername('')
     setNombre('')
+    setEmail('')
     setPassword('')
     setRol('usuario')
     setEstado('activo')
@@ -61,14 +65,15 @@ export default function Usuarios() {
     e.preventDefault()
     try {
       if (editId) {
-        await api.put(`/api/usuarios/${editId}`, { username, nombre, rol, estado, password })
+        await api.put(`/api/usuarios/${editId}`, { username, nombre, email, rol, estado, password })
         toast('Usuario actualizado', 'success')
       } else {
-        await api.post('/api/usuarios', { username, nombre, rol, estado, password })
+        await api.post('/api/usuarios', { username, nombre, email, rol, estado, password })
         toast('Usuario creado', 'success')
       }
       reset()
       await cargar()
+      if (editId === user?.id) await reloadAuth()
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Error', 'error')
     }
@@ -96,6 +101,10 @@ export default function Usuarios() {
             {editId ? 'Editar usuario' : 'Nuevo usuario'}
           </div>
           <form onSubmit={onSubmit} className="space-y-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Correo electrónico</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="usuario@empresa.com" className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-red-400" />
+            </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Nombre</label>
               <input
@@ -133,6 +142,7 @@ export default function Usuarios() {
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none"
               >
                 <option value="usuario">Usuario</option>
+                <option value="supervisor">Supervisor</option>
                 <option value="administrador">Administrador</option>
               </select>
             </div>
@@ -165,11 +175,12 @@ export default function Usuarios() {
           {lista.length === 0 ? (
             <div className="text-sm text-slate-400">Sin usuarios.</div>
           ) : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="min-w-[820px] w-full text-sm">
               <thead>
                 <tr className="border-b text-left text-xs text-slate-400">
                   <th className="py-1 pr-2">Usuario</th>
                   <th className="px-2 py-1">Nombre</th>
+                  <th className="px-2 py-1">Correo</th>
                   <th className="px-2 py-1">Rol</th>
                   <th className="px-2 py-1">Estado</th>
                   <th className="px-2 py-1">Extracciones</th>
@@ -184,6 +195,7 @@ export default function Usuarios() {
                       {u.id === user?.id && <span className="ml-1 text-xs text-slate-400">(tú)</span>}
                     </td>
                     <td className="px-2 py-2">{u.nombre || '—'}</td>
+                    <td className="max-w-44 truncate px-2 py-2" title={u.email}>{u.email || 'Pendiente'}</td>
                     <td className="px-2 py-2">
                       <span
                         className={
@@ -223,7 +235,7 @@ export default function Usuarios() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div>
       </div>

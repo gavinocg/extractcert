@@ -25,6 +25,12 @@ export default function Visor() {
 
   const fromPath = sp.get('from_path') ?? ''
   const fromPagina = sp.get('from_pagina') ?? ''
+  const sourceDirectory = ruta.includes('/') ? ruta.substring(0, ruta.lastIndexOf('/')) : ''
+  const returnPath = fromPath || sourceDirectory
+  const returnParams = new URLSearchParams()
+  if (returnPath) returnParams.set('path', returnPath)
+  if (returnPath) returnParams.set('pagina', fromPagina || '1')
+  const returnUrl = returnParams.size ? `/lote?${returnParams.toString()}` : '/lote'
 
   const original = `/api/pdf/original?ruta=${encodeURIComponent(ruta)}`
 
@@ -73,11 +79,7 @@ export default function Visor() {
       })
       toast(`Extracción guardada: ${r.nombre}`, 'success')
       setTimeout(() => {
-        if (fromPath) navigate(`/?path=${encodeURIComponent(fromPath)}&pagina=${fromPagina || '1'}`)
-        else {
-          const dir = ruta.includes('/') ? ruta.substring(0, ruta.lastIndexOf('/')) : ''
-          navigate(dir ? `/?path=${encodeURIComponent(dir)}` : '/')
-        }
+        navigate(returnUrl)
       }, 700)
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Error', 'error')
@@ -105,7 +107,7 @@ export default function Visor() {
             {ayuda ? 'Ocultar ayuda' : 'Ayuda'}
           </button>
           <Link
-            to={fromPath ? `/?path=${encodeURIComponent(fromPath)}&pagina=${fromPagina || '1'}` : '/'}
+            to={returnUrl}
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100"
           >
             ← Volver

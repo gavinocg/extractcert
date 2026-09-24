@@ -55,7 +55,7 @@ def login(form: LoginIn, response: Response, db: Session = Depends(get_db)):
     _set_cookies(response, user)
     return {
         "ok": True,
-        "user": {"id": user.id, "username": user.username, "rol": user.rol},
+        "user": {"id": user.id, "username": user.username, "nombre": user.nombre, "email": user.email or "", "rol": user.rol},
     }
 
 
@@ -71,7 +71,7 @@ def logout(
 
 @router.get("/me")
 def me(user: User = Depends(get_current_user)):
-    return {"id": user.id, "username": user.username, "rol": user.rol}
+    return {"id": user.id, "username": user.username, "nombre": user.nombre, "email": user.email or "", "rol": user.rol}
 
 
 class PasswordIn(BaseModel):

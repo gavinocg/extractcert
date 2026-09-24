@@ -351,7 +351,7 @@ def archive_summary(
         "resumen": {
             "extracciones": len(extractions),
             "reextracciones": sum(1 for item in extractions if item.estado == "rehecho"),
-            "errores": len(errors),
+            "errores": serialized["metricas"]["errores"],
             "paginas_extraidas": sum(max(0, item.pagina_fin - item.pagina_inicio + 1) for item in extractions),
             "primer_procesamiento": min(processed_dates).isoformat() if processed_dates else None,
             "ultimo_procesamiento": max(processed_dates).isoformat() if processed_dates else None,

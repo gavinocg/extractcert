@@ -33,7 +33,7 @@ def enviar_correo_config(config: dict, destinatarios: list[str], asunto: str, cu
     use_tls = config["tls"]
     if port == 465:
         context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(host, port, context=context) as s:
+        with smtplib.SMTP_SSL(host, port, context=context, timeout=10) as s:
             if user:
                 s.login(user, pwd)
             s.sendmail(msg["From"], destinatarios, msg.as_string())

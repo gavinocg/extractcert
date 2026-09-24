@@ -28,7 +28,7 @@ from .routers import (
 def _seed() -> None:
     db = SessionLocal()
     try:
-        if not db.query(User).filter(User.username == "admin").first():
+        if not db.query(User).filter(User.rol == "administrador").first():
             db.add(
                 User(
                     username="admin",

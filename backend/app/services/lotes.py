@@ -71,17 +71,18 @@ def metricas(db: Session, lote: Lote) -> dict:
     configured_paths = {fs.normalizar(os.path.abspath(os.path.join(configured_directory, name))) for name in pdf_names}
     path_aliases = current_paths | configured_paths
     if path_aliases:
+        extraction_filter = Extraccion.original_path.in_(path_aliases)
+        error_filter = TramiteError.original_path.in_(path_aliases)
+        if lote.id is not None:
+            extraction_filter = or_(Extraccion.lote_id == lote.id, extraction_filter)
+            error_filter = or_(TramiteError.lote_id == lote.id, error_filter)
         extracted = {
             fs.filename_key(os.path.basename(fs.normalizar(path)))
-            for (path,) in db.query(Extraccion.original_path).filter(
-                or_(Extraccion.lote_id == lote.id, Extraccion.original_path.in_(path_aliases))
-            ).all()
+            for (path,) in db.query(Extraccion.original_path).filter(extraction_filter).all()
         }
         errors = {
             fs.filename_key(os.path.basename(fs.normalizar(path)))
-            for (path,) in db.query(TramiteError.original_path).filter(
-                or_(TramiteError.lote_id == lote.id, TramiteError.original_path.in_(path_aliases))
-            ).all()
+            for (path,) in db.query(TramiteError.original_path).filter(error_filter).all()
         } - extracted
         extracted &= pdf_keys
         errors &= pdf_keys
@@ -100,6 +101,13 @@ def metricas(db: Session, lote: Lote) -> dict:
         "pendientes": pendientes,
         "porcentaje": porcentaje,
     }
+
+
+def metricas_directorio(db: Session, relative: str, nombre: str = "") -> dict:
+    lote = db.query(Lote).filter(Lote.relative_path == relative).first()
+    if lote is None:
+        lote = Lote(relative_path=relative, nombre=nombre or os.path.basename(relative))
+    return metricas(db, lote)
 
 
 def sync_estado(db: Session, lote: Lote, stats: dict | None = None) -> dict:

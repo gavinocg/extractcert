@@ -66,13 +66,15 @@ def arbol(
         child_dirs = fs.listar_dirs(directory)
         pdfs = fs.listar_pdfs(directory)
         lote = db.query(Lote).filter(Lote.relative_path == relative).first()
+        is_final = bool(pdfs) and not child_dirs
         result.append({
             "nombre": name,
             "relative_path": relative,
-            "es_lote": bool(pdfs) and not child_dirs,
+            "es_lote": is_final,
             "tiene_hijos": bool(child_dirs),
             "total": len(pdfs),
             "lote": lote_service.serialize(db, lote) if lote else None,
+            "metricas": lote_service.metricas_directorio(db, relative, name) if is_final else None,
         })
     db.commit()
     return {"actual": lote_service.relative_path(base, current) if current != base else "", "items": result}

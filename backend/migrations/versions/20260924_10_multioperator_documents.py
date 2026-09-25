@@ -83,13 +83,13 @@ def _backfill_legacy() -> None:
     for source in sources:
         key = _document_key(source["lote_id"], source["original_path"])
         name = os.path.basename((source["original_path"] or "").replace("\\", "/"))[:255]
-        bind.execute(sa.text("INSERT INTO lote_documentos (lote_id, document_key, relative_path, nombre, estado, presente, version, completed_by, completed_at) SELECT :lote_id, :key, :name, :name, :estado, 1, :version, :user_id, :completed_at WHERE NOT EXISTS (SELECT 1 FROM lote_documentos WHERE lote_id=:lote_id AND document_key=:key)"), {**source, "key": key, "name": name, "version": 1 if source["estado"] == "completado" else 0, "completed_at": source["processed_at"]})
+        bind.execute(sa.text("INSERT INTO lote_documentos (lote_id, document_key, relative_path, nombre, estado, presente, version, completed_by, completed_at) SELECT :lote_id, :key, :name, :name, :estado, 1, :version, :user_id, :completed_at FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM lote_documentos WHERE lote_id=:lote_id AND document_key=:key)"), {**source, "key": key, "name": name, "version": 1 if source["estado"] == "completado" else 0, "completed_at": source["processed_at"]})
         document_id = bind.execute(sa.text("SELECT id FROM lote_documentos WHERE lote_id=:lote_id AND document_key=:key"), {"lote_id": source["lote_id"], "key": key}).scalar()
         table = "extracciones" if source["estado"] == "completado" else "tramite_errores"
         bind.execute(sa.text(f"UPDATE {table} SET documento_id=:document_id WHERE lote_id=:lote_id AND original_path=:original_path AND documento_id IS NULL"), {"document_id": document_id, "lote_id": source["lote_id"], "original_path": source["original_path"]})
     rows = bind.execute(sa.text("SELECT id, documento_id, user_id, pagina_inicio, pagina_fin, destino_path, estado, processed_at FROM extracciones WHERE documento_id IS NOT NULL ORDER BY id")).mappings().all()
     for row in rows:
-        bind.execute(sa.text("INSERT INTO extraccion_versiones (extraccion_id, documento_id, version, autor_id, pagina_inicio, pagina_fin, destino_path, tipo, idempotency_key, created_at) SELECT :id, :documento_id, 1, :user_id, :pagina_inicio, :pagina_fin, :destino_path, :estado, :key, :processed_at WHERE NOT EXISTS (SELECT 1 FROM extraccion_versiones WHERE idempotency_key=:key)"), {**row, "key": f"legacy:{row['id']}"})
+        bind.execute(sa.text("INSERT INTO extraccion_versiones (extraccion_id, documento_id, version, autor_id, pagina_inicio, pagina_fin, destino_path, tipo, idempotency_key, created_at) SELECT :id, :documento_id, 1, :user_id, :pagina_inicio, :pagina_fin, :destino_path, :estado, :key, :processed_at FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM extraccion_versiones WHERE idempotency_key=:key)"), {**row, "key": f"legacy:{row['id']}"})
         bind.execute(sa.text("UPDATE lote_documentos SET version=GREATEST(version, 1), estado='completado', completed_by=:user_id, completed_at=:processed_at WHERE id=:documento_id"), row)
 
 

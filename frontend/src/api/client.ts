@@ -13,6 +13,8 @@ class ApiError extends Error {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  window.dispatchEvent(new Event('app:loading-start'))
+  try {
   const opts: RequestInit = { ...init }
   const method = (opts.method ?? 'GET').toUpperCase()
   if (method !== 'GET') {
@@ -37,7 +39,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     }
     throw new ApiError(res.status, msg)
   }
-  return (await res.json()) as T
+    return (await res.json()) as T
+  } finally {
+    window.dispatchEvent(new Event('app:loading-end'))
+  }
 }
 
 export const api = {

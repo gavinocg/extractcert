@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..core.deps import get_current_user, require_csrf
 from ..db.database import get_db
-from ..db.models import AssignmentLock, Contacto, Lote, TramiteError, User
+from ..db.models import AssignmentLock, Contacto, Lote, LoteDocumento, LoteOperador, TramiteError, User
 from ..services import fs
 from ..services.email import enviar_correo
 from ..services.lotes import require_path_access
@@ -19,6 +19,8 @@ router = APIRouter(prefix="/api/errores", tags=["errores"])
 class ErrorIn(BaseModel):
     ruta: str
     observacion: str
+    documento_id: int
+    lease_token: str
 
 
 class EnviarIn(BaseModel):
@@ -45,20 +47,30 @@ def crear(body: ErrorIn, user: User = Depends(get_current_user), db: Session = D
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Observación requerida.")
     real, lote_id = _validar_ruta(body.ruta, db, user)
     db.query(AssignmentLock).filter(AssignmentLock.clave == "global").with_for_update().one()
-    real, locked_lote_id = _validar_ruta(body.ruta, db, user)
-    if locked_lote_id != lote_id:
-        raise HTTPException(status.HTTP_409_CONFLICT, "La asignación del lote cambió.")
-    lote_id = locked_lote_id
+    db.query(Lote).filter(Lote.id == lote_id).with_for_update().one()
+    documento = db.query(LoteDocumento).filter(LoteDocumento.id == body.documento_id).with_for_update().first()
+    if not documento or documento.lote_id != lote_id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "El documento no pertenece al lote.")
+    from ..services import lotes as lote_service
+    lote_service.require_member(db, lote_id, user.id)
+    lote_service.validate_lease(documento, user.id, body.lease_token)
     canon = fs.normalizar(real)
     existente = db.query(TramiteError).filter(TramiteError.original_path == canon).first()
     if existente:
         existente.observacion = body.observacion.strip()
         existente.user_id = user.id
         existente.lote_id = lote_id
+        existente.documento_id = documento.id
+        documento.estado, documento.completed_by = "error", user.id
+        documento.completed_at = __import__("datetime").datetime.now()
+        lote_service.clear_lease(documento)
         db.commit()
         return {"ok": True, "id": existente.id}
-    e = TramiteError(original_path=canon, archivo=os.path.basename(canon), observacion=body.observacion.strip(), user_id=user.id, lote_id=lote_id)
+    e = TramiteError(original_path=canon, archivo=os.path.basename(canon), observacion=body.observacion.strip(), user_id=user.id, lote_id=lote_id, documento_id=documento.id)
     db.add(e)
+    documento.estado, documento.completed_by = "error", user.id
+    documento.completed_at = __import__("datetime").datetime.now()
+    lote_service.clear_lease(documento)
     db.commit()
     return {"ok": True, "id": e.id}
 
@@ -67,7 +79,7 @@ def crear(body: ErrorIn, user: User = Depends(get_current_user), db: Session = D
 def listar(path: str | None = None, pagina: int = Query(1, ge=1), tam: int = Query(20, ge=1, le=100), user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     q = db.query(TramiteError, User.username).join(User, TramiteError.user_id == User.id)
     if user.rol == "usuario":
-        assigned = db.query(Lote.id).filter(Lote.operador_id == user.id)
+        assigned = db.query(LoteOperador.lote_id).filter(LoteOperador.operador_id == user.id, LoteOperador.activo.is_(True))
         q = q.filter(TramiteError.lote_id.in_(assigned))
     if path:
         base = raiz_origen(db)
@@ -78,18 +90,30 @@ def listar(path: str | None = None, pagina: int = Query(1, ge=1), tam: int = Que
         q = q.filter(TramiteError.original_path.like(pref, escape="\\"))
     total = q.count()
     rows = q.order_by(TramiteError.created_at.desc()).offset((pagina - 1) * tam).limit(tam).all()
-    datos = [{"id": e.id, "original_path": e.original_path, "archivo": e.archivo, "observacion": e.observacion, "username": u, "created_at": e.created_at.isoformat() if e.created_at else None} for e, u in rows]
+    datos = [{"id": e.id, "documento_id": e.documento_id, "original_path": e.original_path, "archivo": e.archivo, "observacion": e.observacion, "username": u, "created_at": e.created_at.isoformat() if e.created_at else None} for e, u in rows]
     return {"registros": datos, "total": total, "pagina": pagina, "tam": tam}
 
 
 @router.delete("/{eid}")
-def eliminar(eid: int, user: User = Depends(get_current_user), db: Session = Depends(get_db), _: None = Depends(require_csrf)):
+def eliminar(eid: int, lease_token: str = Query(...), user: User = Depends(get_current_user), db: Session = Depends(get_db), _: None = Depends(require_csrf)):
+    initial = db.get(TramiteError, eid)
+    if not initial:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No existe.")
     db.query(AssignmentLock).filter(AssignmentLock.clave == "global").with_for_update().one()
-    e = db.get(TramiteError, eid)
+    db.query(Lote).filter(Lote.id == initial.lote_id).with_for_update().one()
+    e = db.query(TramiteError).filter(TramiteError.id == eid).with_for_update().first()
     if not e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No existe.")
-    require_path_access(db, user, e.original_path)
+    if not e.documento_id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "El error no está ligado a un documento.")
+    documento = db.query(LoteDocumento).filter(LoteDocumento.id == e.documento_id).with_for_update().one()
+    from ..services import lotes as lote_service
+    lote_service.require_member(db, documento.lote_id, user.id)
+    # El borrado es una mutación operativa: el cliente debe reclamar de nuevo.
+    lote_service.validate_lease(documento, user.id, lease_token)
     db.delete(e)
+    documento.estado, documento.completed_by, documento.completed_at = "pendiente", None, None
+    lote_service.clear_lease(documento)
     db.commit()
     return {"ok": True}
 

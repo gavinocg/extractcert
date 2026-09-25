@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, ApiError } from '../api/client'
 import ErrorModal from '../components/ErrorModal'
 import EnviarErroresModal from '../components/EnviarErroresModal'
 import ExtraerModal from '../components/ExtraerModal'
@@ -32,7 +32,11 @@ interface Item {
   nombre_usuario: string | null
   fecha: string | null
   error: { id: number; observacion: string; username: string | null; nombre: string | null } | null
+  documento_id: number | null
+  lease: { reservado_por: number | { id: number; username: string; nombre?: string } | null; lease_expires_at: string | null } | null
 }
+
+interface Claim { documento_id: number; lease_token: string; lease_expires_at: string }
 
 function formatoFecha(iso: string | null): string {
   if (!iso) return '—'
@@ -64,10 +68,11 @@ export default function Dashboard() {
   const [dirs, setDirs] = useState<string[]>([])
   const [err, setErr] = useState('')
   const [cargando, setCargando] = useState(true)
-  const [errorTarget, setErrorTarget] = useState<Item | null>(null)
+  const [errorTarget, setErrorTarget] = useState<{ item: Item; leaseToken: string } | null>(null)
   const [selected, setSelected] = useState<number[]>([])
   const [showEnviar, setShowEnviar] = useState(false)
-  const [extraerTarget, setExtraerTarget] = useState<{ ruta: string; ini?: number; fin?: number; extraccionId?: number; reextra?: boolean; error?: { id: number; observacion: string; username: string | null } | null } | null>(null)
+  const [extraerTarget, setExtraerTarget] = useState<{ ruta: string; documentoId: number; leaseToken: string; ini?: number; fin?: number; extraccionId?: number; reextra?: boolean; error?: { id: number; observacion: string; username: string | null } | null } | null>(null)
+  const [claiming, setClaiming] = useState(0)
   const toast = useToast((s) => s.show)
   const requestId = useRef(0)
 
@@ -129,18 +134,63 @@ export default function Dashboard() {
 
   const guardarError = async (obs: string) => {
     if (!errorTarget) return
-    await api.post('/api/errores', { ruta: errorTarget.ruta, observacion: obs })
-    toast('Error guardado', 'success')
-    void cargar(path, dash?.pagina)
-    window.dispatchEvent(new Event('lotes:changed'))
+    try {
+      await api.post('/api/errores', { ruta: errorTarget.item.ruta, observacion: obs, documento_id: errorTarget.item.documento_id, lease_token: errorTarget.leaseToken })
+      toast('Error guardado', 'success')
+      void cargar(path, dash?.pagina)
+      window.dispatchEvent(new Event('lotes:changed'))
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'No se pudo guardar el error', 'error')
+      if (error instanceof ApiError && (error.status === 409 || error.status === 403)) void cargar(path, dash?.pagina)
+      throw error
+    }
   }
 
-  const corregir = async (it: Item) => {
-    if (!it.error) return
-    await api.del(`/api/errores/${it.error.id}`)
-    toast('Marcado como corregido', 'success')
+  const closeError = () => {
+    if (errorTarget?.item.documento_id) void api.post(`/api/lotes/documentos/${errorTarget.item.documento_id}/release`, { lease_token: errorTarget.leaseToken }).catch(() => undefined)
+    setErrorTarget(null)
     void cargar(path, dash?.pagina)
-    window.dispatchEvent(new Event('lotes:changed'))
+  }
+
+  useEffect(() => {
+    if (!errorTarget?.item.documento_id) return
+    const heartbeat = window.setInterval(() => {
+      void api.post(`/api/lotes/documentos/${errorTarget.item.documento_id}/heartbeat`, { lease_token: errorTarget.leaseToken }).catch((error) => {
+        toast(error instanceof Error ? error.message : 'Se perdió la reserva del documento', 'error')
+        setErrorTarget(null)
+        void cargar(path, dash?.pagina)
+      })
+    }, 4 * 60 * 1000)
+    return () => window.clearInterval(heartbeat)
+  }, [errorTarget, path, dash?.pagina, cargar, toast])
+
+  const corregir = async (it: Item) => {
+    if (!it.error || !it.documento_id) return
+    setClaiming(it.documento_id)
+    try {
+      const claim = await api.post<Claim>(`/api/lotes/documentos/${it.documento_id}/claim`, {})
+      await api.del(`/api/errores/${it.error.id}?lease_token=${encodeURIComponent(claim.lease_token)}`)
+      toast('Marcado como corregido', 'success')
+      void cargar(path, dash?.pagina)
+      window.dispatchEvent(new Event('lotes:changed'))
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'No se pudo corregir', 'error')
+      if (error instanceof ApiError && (error.status === 409 || error.status === 403)) void cargar(path, dash?.pagina)
+    } finally { setClaiming(0) }
+  }
+
+  const claimAndOpen = async (it: Item, mode: 'error' | 'extract') => {
+    if (!it.documento_id) { toast('Documento no disponible en el inventario', 'error'); return }
+    setClaiming(it.documento_id)
+    try {
+      const claim = await api.post<Claim>(`/api/lotes/documentos/${it.documento_id}/claim`, {})
+      if (mode === 'error') setErrorTarget({ item: it, leaseToken: claim.lease_token })
+      else setExtraerTarget({ ruta: it.ruta, documentoId: it.documento_id, leaseToken: claim.lease_token, ini: it.pagina_inicio ?? undefined, fin: it.pagina_fin ?? undefined, extraccionId: it.extraccion_id ?? undefined, reextra: it.estado !== 'pendiente', error: it.error })
+      void cargar(path, dash?.pagina)
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'No se pudo reservar el documento', 'error')
+      if (error instanceof ApiError && (error.status === 409 || error.status === 403)) void cargar(path, dash?.pagina)
+    } finally { setClaiming(0) }
   }
 
   const toggleSel = (id: number) => setSelected((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
@@ -285,6 +335,9 @@ export default function Dashboard() {
                       const hasError = !!it.error
                       const realizado = !pendiente && !hasError
                       const usuario = it.nombre_usuario || it.error?.nombre || it.username || it.error?.username || '—'
+                      const activeLease = !!it.lease?.lease_expires_at && new Date(it.lease.lease_expires_at).getTime() > Date.now()
+                      const leaseOwner = it.lease?.reservado_por
+                      const reservedBy = leaseOwner && typeof leaseOwner === 'object' ? (leaseOwner.nombre || leaseOwner.username) : leaseOwner === user?.id ? 'ti' : `usuario ${leaseOwner}`
                       return (
                         <tr key={it.ruta} className={`${hasError ? 'bg-red-50' : realizado ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}>
                           <td className="max-w-[220px] px-2 py-1.5">
@@ -299,16 +352,17 @@ export default function Dashboard() {
                           <td className="whitespace-nowrap px-2 py-1.5 text-slate-600">{formatoFecha(it.fecha)}</td>
                           <td className="px-2 py-1.5">
                             <span className="flex shrink-0 items-center gap-1">
+                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${activeLease ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{activeLease ? `En uso por ${reservedBy}` : 'Disponible'}</span>
                               {hasError && (
                                 <>
-                                  <button onClick={() => setErrorTarget(it)} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-white">Ver error</button>
-                                  <button onClick={() => corregir(it)} className="rounded bg-emerald-600 px-2 py-1 text-xs text-white hover:bg-emerald-700">Corregido</button>
+                                  <button disabled={claiming === it.documento_id} onClick={() => void claimAndOpen(it, 'error')} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-white disabled:opacity-40">Ver/modificar error</button>
+                                  <button disabled={claiming === it.documento_id} onClick={() => void corregir(it)} className="rounded bg-emerald-600 px-2 py-1 text-xs text-white hover:bg-emerald-700 disabled:opacity-40">Corregido</button>
                                 </>
                               )}
                               {pendiente && !hasError ? (
-                                <button onClick={() => setExtraerTarget({ ruta: it.ruta, error: it.error })} className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700">Extraer</button>
+                                <button disabled={claiming === it.documento_id} onClick={() => void claimAndOpen(it, 'extract')} className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-40">Extraer</button>
                               ) : !hasError ? (
-                                <button onClick={() => setExtraerTarget({ ruta: it.ruta, ini: it.pagina_inicio ?? 0, fin: it.pagina_fin ?? 0, extraccionId: it.extraccion_id ?? 0, reextra: true, error: it.error })} className="rounded border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50">Volver a extraer</button>
+                                <button disabled={claiming === it.documento_id} onClick={() => void claimAndOpen(it, 'extract')} className="rounded border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-40">Crear nueva versión</button>
                               ) : null}
                             </span>
                           </td>
@@ -337,9 +391,9 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-      {errorTarget && <ErrorModal archivo={errorTarget.nombre} observacionInicial={errorTarget.error?.observacion} onClose={() => setErrorTarget(null)} onSave={guardarError} />}
+      {errorTarget && <ErrorModal archivo={errorTarget.item.nombre} observacionInicial={errorTarget.item.error?.observacion} onClose={closeError} onSave={guardarError} />}
       {showEnviar && <EnviarErroresModal ids={selected} onClose={() => setShowEnviar(false)} onSent={() => { setShowEnviar(false); toast('Enviado', 'success'); setSelected([]) }} />}
-      {extraerTarget && <ExtraerModal ruta={extraerTarget.ruta} ini={extraerTarget.ini} fin={extraerTarget.fin} extraccionId={extraerTarget.extraccionId} reextra={extraerTarget.reextra} error={extraerTarget.error ?? null} onClose={() => setExtraerTarget(null)} onGuardado={() => { void cargar(path, dash?.pagina); window.dispatchEvent(new Event('lotes:changed')) }} onErrorSaved={() => { void cargar(path, dash?.pagina); window.dispatchEvent(new Event('lotes:changed')) }} />}
+      {extraerTarget && <ExtraerModal ruta={extraerTarget.ruta} documentoId={extraerTarget.documentoId} leaseToken={extraerTarget.leaseToken} ini={extraerTarget.ini} fin={extraerTarget.fin} extraccionId={extraerTarget.extraccionId} reextra={extraerTarget.reextra} error={extraerTarget.error ?? null} onClose={() => setExtraerTarget(null)} onLeaseLost={() => void cargar(path, dash?.pagina)} onGuardado={() => { void cargar(path, dash?.pagina); window.dispatchEvent(new Event('lotes:changed')) }} onErrorSaved={() => { void cargar(path, dash?.pagina); window.dispatchEvent(new Event('lotes:changed')) }} />}
     </div>
   )
 }

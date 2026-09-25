@@ -12,7 +12,7 @@ $backend = Join-Path $root "backend"
 $frontend = Join-Path $root "frontend"
 $py      = Join-Path $backend ".venv\Scripts\python.exe"
 $portB   = 8000
-$portF   = 5173
+$portF   = 8001
 
 $stateDir = Join-Path $env:TEMP "ExtractCert"
 New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
@@ -86,7 +86,7 @@ function Start-Backend {
 }
 
 function Start-Frontend {
-    Write-Host "Arrancando frontend (Vite) en http://localhost:$portF ..." -ForegroundColor Green
+    Write-Host "Arrancando frontend (Vite) en http://127.0.0.1:$portF ..." -ForegroundColor Green
     $p = Start-Process -FilePath "cmd.exe" `
         -ArgumentList "/c", "npm run dev" `
         -WorkingDirectory $frontend -WindowStyle Hidden -PassThru
@@ -124,8 +124,8 @@ function Start-All {
     $okB = Wait-Port $portB "Backend" 40
     $okF = Wait-Port $portF "Frontend" 60
     if ($okB) { Write-Host "  Backend listo  http://127.0.0.1:$portB`n" -ForegroundColor Green }
-    if ($okF) { Write-Host "  Frontend listo  http://localhost:$portF`n" -ForegroundColor Green }
-    if ($okF) { Start-Process "http://localhost:$portF" }
+    if ($okF) { Write-Host "  Frontend listo  http://127.0.0.1:$portF`n" -ForegroundColor Green }
+    if ($okF) { Start-Process "http://127.0.0.1:$portF" }
 }
 
 # ---------------------------------------------------------------- preparar venv
@@ -148,7 +148,7 @@ if ($runningB -and $runningF) {
     if ($runningF) { Write-Host "Frontend ya estaba corriendo. Omito." -ForegroundColor Yellow } else { Start-Frontend }
     $null = Wait-Port $portB "Backend" 15
     $null = Wait-Port $portF "Frontend" 60
-    if ((Test-Port $portF) -or (Get-Running (Read-Pid $pidF))) { Start-Process "http://localhost:$portF" }
+    if ((Test-Port $portF) -or (Get-Running (Read-Pid $pidF))) { Start-Process "http://127.0.0.1:$portF" }
 }
 
 # ---------------------------------------------------------------- menú

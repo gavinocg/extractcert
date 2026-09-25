@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 
 from ..core.deps import get_current_user
 from ..db.database import get_db
-from ..db.models import Extraccion, TramiteError, User
+from ..db.models import Extraccion, LoteDocumento, TramiteError, User
 from ..services import fs
+from ..services import lotes as lote_service
 from ..services.lotes import absolute_path, require_directory_access
 from ..services.repo import raiz_origen, raiz_repo
 
@@ -37,6 +38,8 @@ def dashboard(
     if not os.path.isdir(conf):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "El directorio no existe.")
     lote = require_directory_access(db, user, conf)
+    documents = lote_service.sync_documentos(db, lote) if lote else []
+    documents_by_key = {row.document_key: row for row in documents}
 
     pref = fs.like_prefix(conf)
 
@@ -56,6 +59,7 @@ def dashboard(
     for f in pdfs:
         ruta_completa = fs.normalizar(os.path.abspath(os.path.join(conf, f)))
         file_key = fs.filename_key(f)
+        document = documents_by_key.get(lote_service.document_key(lote.id, ruta_completa)) if lote else None
         reg = extraidos_map.get(file_key)
         err = errores_map.get(file_key)
         base_item = {
@@ -65,6 +69,8 @@ def dashboard(
             "nombre_usuario": None,
             "fecha": None,
             "error": None,
+            "documento_id": document.id if document else None,
+            "lease": ({"reservado_por": document.reservado_por, "lease_expires_at": document.lease_expires_at.isoformat() if document.lease_expires_at else None} if document else None),
         }
         if err:
             base_item["error"] = {"id": err.id, "observacion": err.observacion, "username": None, "nombre": None}
@@ -131,7 +137,7 @@ def dashboard(
         for e, username in rows
     ]
 
-    return {
+    result = {
         "origen": conf,
         "repo": raiz_repo(db),
         "pendientes": pendientes,
@@ -144,3 +150,7 @@ def dashboard(
         "pendientes_count": pendientes_count,
         "pagina_sugerida": pagina_sugerida,
     }
+    # sync_documentos puede materializar inventario y enlazar históricos.
+    # Los IDs entregados al frontend deben existir al finalizar la petición.
+    db.commit()
+    return result

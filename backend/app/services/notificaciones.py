@@ -120,9 +120,9 @@ def notify_assignment(db: Session, lote: Lote, operator: User, assigner: User, t
     return send_recorded(db, lote, f"{'reasignacion' if reassigned else 'asignacion'}:{lote.assigned_at.isoformat()}", [operator.email or ""], f"ExtractCert: {title} - {lote.nombre}", html, text)
 
 
-def notify_completion(db: Session, lote: Lote, operator: User, recipients: list[str], stats: dict, app_url: str) -> dict:
+def notify_completion(db: Session, lote: Lote, operators: list[User], recipients: list[str], stats: dict, app_url: str) -> dict:
     rows = [
-        ("Operador", operator.nombre or operator.username),
+        ("Equipo", ", ".join(operator.nombre or operator.username for operator in operators)),
         ("Carpeta", lote.nombre),
         ("Total de archivos", str(stats["total"])),
         ("Realizados", str(stats["realizados"])),

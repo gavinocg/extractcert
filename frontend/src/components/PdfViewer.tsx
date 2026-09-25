@@ -52,6 +52,7 @@ const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
   const [finS, setFinS] = useState(fin ?? 0)
   const [cargando, setCargando] = useState(false)
   const [zoom, setZoom] = useState(75)
+  const zoomRef = useRef(75)
   const [rot, setRot] = useState(0)
   const rotRef = useRef(0)
   const [pageOrder, setPageOrder] = useState<number[]>([])
@@ -59,12 +60,16 @@ const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
   const renderTaskRef = useRef(new Map<HTMLCanvasElement, { cancel(): void }>())
   const [paniendo, setPaniendo] = useState(false)
   const panRef = useRef({ activo: false, x: 0, y: 0, left: 0, top: 0 })
+  const [mobileGestures, setMobileGestures] = useState(false)
+  const touchRef = useRef({ distance: 0, zoom: 75, x: 0, y: 0, left: 0, top: 0 })
 
   useEffect(() => {
     if (numPages > 0 && pageOrder.length !== numPages) {
       setPageOrder(Array.from({ length: numPages }, (_, i) => i + 1))
     }
   }, [numPages])
+
+  useEffect(() => { zoomRef.current = zoom }, [zoom])
 
   const handleDragStart = useCallback((e: React.DragEvent<HTMLButtonElement>, pageNum: number) => {
     dragSrcRef.current = e.currentTarget
@@ -313,6 +318,58 @@ const handleDragEnd = useCallback(() => {
     return () => el.removeEventListener('wheel', onWheel)
   }, [gestoRueda, zoomCtrl])
 
+  useEffect(() => {
+    if (!zoomCtrl) { setMobileGestures(false); return }
+    const media = window.matchMedia('(pointer: coarse) and (max-width: 1024px)')
+    const update = () => setMobileGestures(media.matches)
+    update()
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [zoomCtrl])
+
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el || !mobileGestures) return
+    const distance = (touches: TouchList) => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY)
+    const onStart = (event: TouchEvent) => {
+      if (event.touches.length === 2) {
+        touchRef.current.distance = distance(event.touches)
+        touchRef.current.zoom = zoomRef.current
+      } else if (event.touches.length === 1) {
+        touchRef.current.x = event.touches[0].clientX
+        touchRef.current.y = event.touches[0].clientY
+        touchRef.current.left = el.scrollLeft
+        touchRef.current.top = el.scrollTop
+        setPaniendo(true)
+      }
+    }
+    const onMove = (event: TouchEvent) => {
+      if (event.touches.length === 2 && touchRef.current.distance > 0) {
+        event.preventDefault()
+        const ratio = distance(event.touches) / touchRef.current.distance
+        setZoom(Math.min(200, Math.max(25, Math.round(touchRef.current.zoom * ratio))))
+      } else if (event.touches.length === 1) {
+        event.preventDefault()
+        el.scrollLeft = touchRef.current.left - (event.touches[0].clientX - touchRef.current.x)
+        el.scrollTop = touchRef.current.top - (event.touches[0].clientY - touchRef.current.y)
+      }
+    }
+    const onEnd = () => {
+      touchRef.current.distance = 0
+      setPaniendo(false)
+    }
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: false })
+    el.addEventListener('touchend', onEnd)
+    el.addEventListener('touchcancel', onEnd)
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', onEnd)
+      el.removeEventListener('touchcancel', onEnd)
+    }
+  }, [mobileGestures])
+
   const finPan = useCallback(() => {
     panRef.current.activo = false
     setPaniendo(false)
@@ -449,6 +506,7 @@ const handleDragEnd = useCallback(() => {
         >
           ›
         </button>
+        {mobileGestures && <><div className="h-4 w-px bg-slate-200" /><button onClick={() => setZoom((value) => Math.max(25, value - 15))} className="rounded border border-slate-300 px-2.5 py-1 text-xs font-bold" aria-label="Alejar">−</button><span className="min-w-10 text-center text-[11px] font-semibold text-slate-500">{zoom}%</span><button onClick={() => setZoom((value) => Math.min(200, value + 15))} className="rounded border border-slate-300 px-2.5 py-1 text-xs font-bold" aria-label="Acercar">+</button></>}
       </div>
 
       <div
@@ -458,9 +516,10 @@ const handleDragEnd = useCallback(() => {
         onPointerMove={moverPan}
         onPointerUp={finPan}
         onPointerCancel={finPan}
-        className={`flex-1 overflow-auto p-2 ${gestoRueda ? (paniendo ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
-        style={{ minHeight: 360 }}
+        className={`relative flex-1 overflow-auto p-2 ${gestoRueda ? (paniendo ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
+        style={{ minHeight: 360, touchAction: mobileGestures ? 'none' : 'auto' }}
       >
+        {mobileGestures && !cargando && <div className="pointer-events-none sticky left-1/2 top-2 z-10 w-fit -translate-x-1/2 rounded-full bg-slate-900/75 px-3 py-1 text-[11px] font-medium text-white shadow">Pellizca para zoom · Arrastra para mover</div>}
         {cargando ? (
           <div className="flex h-full min-h-[300px] items-center justify-center text-slate-400">
             Cargando PDF…
@@ -474,7 +533,7 @@ const handleDragEnd = useCallback(() => {
                   if (el) canvasMapRef.current.set(n, el)
                   else canvasMapRef.current.delete(n)
                 }}
-                className="max-w-full shadow-sm"
+                className={`${zoomCtrl ? '' : 'max-w-full'} shadow-sm`}
               />
             ))}
           </div>

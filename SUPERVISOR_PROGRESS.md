@@ -166,6 +166,33 @@ Fecha de inicio: 2026-09-24
 - La columna Avance vuelve a mostrarse para todas las carpetas finales.
 - El calculo barre automaticamente PDFs, extracciones y errores aunque la carpeta aun no tenga lote creado.
 
+## Multioperador seguro
+
+- Multiples responsables activos por lote mediante `lote_operadores`.
+- Inventario persistente y estado por PDF mediante `lote_documentos`.
+- Lease exclusivo de 10 minutos, heartbeat, liberacion y recuperacion de vencidos.
+- Guardado idempotente y extracciones versionadas sin sobreescritura.
+- Fingerprint por tamano y mtime para detectar reemplazos del original.
+- Finalizacion bloqueada con pendientes o leases activos.
+- Productividad y auditoria atribuidas al autor real de cada version.
+- Migracion `20260924_10` reintentada con exito sobre MySQL local tras simular DDL parcial.
+- Claim exclusivo validado con dos sesiones MySQL independientes.
+- Plan de aceptacion documentado en `MULTIOPERATOR_TEST_PLAN.md`.
+
+## Gestos moviles en vista previa
+
+- La vista previa final en dispositivos tactiles admite pellizco para zoom.
+- Un dedo permite desplazar el documento ampliado.
+- Controles tactiles `-` y `+` muestran el porcentaje de zoom.
+- Los gestos se activan solo con puntero coarse y pantalla de hasta 1024 px; escritorio conserva su comportamiento.
+
+## Rendimiento de Asignar
+
+- El arbol se pagina en servidor con 5 registros por pagina.
+- Solo se barren filesystem y metricas de las cinco carpetas visibles.
+- Navegacion incluye total, rango mostrado, Anterior y Siguiente.
+- Medicion local: 5 carpetas finales con metricas en aproximadamente 1.8 segundos.
+
 ## Archivados
 
 - Los lotes notificados al 100% salen de Supervision y pasan a Archivados.

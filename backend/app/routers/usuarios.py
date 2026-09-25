@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from ..core import security
 from ..core.deps import require_admin, require_csrf
 from ..db.database import get_db
-from ..db.models import Extraccion, Lote, LoteAsignacionHistorial, TramiteError, User
+from ..db.models import Extraccion, Lote, LoteAsignacionHistorial, LoteOperador, TramiteError, User
 
 router = APIRouter(prefix="/api/usuarios", tags=["usuarios"])
 
@@ -126,8 +126,9 @@ def actualizar(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "El correo ya está registrado.")
     new_role = _rol_valido(body.rol)
     new_status = _estado_valido(body.estado)
-    active_lots = db.query(Lote).filter(
-        Lote.operador_id == user_id,
+    active_lots = db.query(LoteOperador).join(Lote).filter(
+        LoteOperador.operador_id == user_id,
+        LoteOperador.activo.is_(True),
         Lote.estado.in_(("asignado", "en_progreso")),
     ).count()
     if active_lots and (new_role not in ("usuario", "supervisor") or new_status != "activo"):
@@ -168,6 +169,9 @@ def eliminar(
         or db.query(Lote).filter((Lote.operador_id == user_id) | (Lote.asignado_por_id == user_id)).first()
         or db.query(LoteAsignacionHistorial).filter(
             (LoteAsignacionHistorial.operador_id == user_id) | (LoteAsignacionHistorial.asignado_por_id == user_id)
+        ).first()
+        or db.query(LoteOperador).filter(
+            (LoteOperador.operador_id == user_id) | (LoteOperador.asignado_por_id == user_id)
         ).first()
     )
     if has_activity:

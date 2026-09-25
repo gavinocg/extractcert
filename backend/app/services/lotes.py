@@ -80,7 +80,10 @@ def require_member(db: Session, lote_id: int, user_id: int) -> None:
 def sync_documentos(db: Session, lote: Lote) -> list[LoteDocumento]:
     if lote.id is None:
         raise ValueError("sync_documentos requiere un lote persistido")
-    lote = db.query(Lote).filter(Lote.id == lote.id).with_for_update().one()
+    # Las métricas y el dashboard pueden sincronizar el mismo lote en paralelo.
+    # El índice único + savepoint protegen la creación sin bloquear lotes en
+    # distinto orden, evitando deadlocks entre Supervisión y Productividad.
+    lote = db.query(Lote).filter(Lote.id == lote.id).one()
     directory = absolute_path(db, lote.relative_path)
     names = fs.listar_pdfs(directory) if os.path.isdir(directory) else []
     rows = {row.document_key: row for row in db.query(LoteDocumento).filter(LoteDocumento.lote_id == lote.id).all()}

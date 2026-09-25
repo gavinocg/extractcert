@@ -17,6 +17,7 @@ export interface Lote {
   nombre: string
   relative_path: string
   operador: PersonaResumen | null
+  operadores: PersonaResumen[]
   asignado_por: PersonaResumen | null
   estado: string
   assigned_at: string | null

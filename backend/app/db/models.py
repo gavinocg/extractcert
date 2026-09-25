@@ -3,6 +3,8 @@ import hashlib
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
+    Boolean,
     DateTime,
     Enum,
     ForeignKey,
@@ -63,6 +65,54 @@ class Lote(Base):
 
     operador: Mapped[User | None] = relationship(foreign_keys=[operador_id])
     asignado_por: Mapped[User | None] = relationship(foreign_keys=[asignado_por_id])
+    miembros: Mapped[list["LoteOperador"]] = relationship(back_populates="lote", cascade="all, delete-orphan")
+    documentos: Mapped[list["LoteDocumento"]] = relationship(back_populates="lote", cascade="all, delete-orphan")
+
+
+class LoteOperador(Base):
+    __tablename__ = "lote_operadores"
+    __table_args__ = (Index("uq_lote_operador", "lote_id", "operador_id", unique=True),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lote_id: Mapped[int] = mapped_column(ForeignKey("lotes.id", ondelete="CASCADE"), nullable=False)
+    operador_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", nullable=False)
+    asignado_por_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    assigned_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    unassigned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    lote: Mapped[Lote] = relationship(back_populates="miembros")
+    operador: Mapped[User] = relationship(foreign_keys=[operador_id])
+
+
+class LoteDocumento(Base):
+    __tablename__ = "lote_documentos"
+    __table_args__ = (
+        Index("uq_lote_document_key", "lote_id", "document_key", unique=True),
+        Index("ix_lote_documentos_estado", "lote_id", "estado"),
+        Index("ix_lote_documentos_lease", "lease_expires_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lote_id: Mapped[int] = mapped_column(ForeignKey("lotes.id", ondelete="CASCADE"), nullable=False)
+    document_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    relative_path: Mapped[str] = mapped_column(String(700), nullable=False)
+    nombre: Mapped[str] = mapped_column(String(255), nullable=False)
+    estado: Mapped[str] = mapped_column(String(30), default="pendiente", server_default="pendiente", nullable=False)
+    presente: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    source_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    source_mtime_ns: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    reservado_por: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    lease_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    reservado_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    lote: Mapped[Lote] = relationship(back_populates="documentos")
 
 
 class LoteAsignacionHistorial(Base):
@@ -123,6 +173,8 @@ class Extraccion(Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     lote_id: Mapped[int | None] = mapped_column(ForeignKey("lotes.id", ondelete="SET NULL"), index=True, nullable=True)
+    documento_id: Mapped[int | None] = mapped_column(ForeignKey("lote_documentos.id", ondelete="SET NULL"), index=True, nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
     original_path: Mapped[str] = mapped_column(Text, nullable=False)
     original_key: Mapped[str] = mapped_column(
         String(64), unique=True, nullable=False,
@@ -144,6 +196,23 @@ class Extraccion(Base):
     user: Mapped[User] = relationship(back_populates="extracciones")
 
 
+class ExtraccionVersion(Base):
+    __tablename__ = "extraccion_versiones"
+    __table_args__ = (Index("uq_extraccion_version", "extraccion_id", "version", unique=True),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    extraccion_id: Mapped[int] = mapped_column(ForeignKey("extracciones.id", ondelete="CASCADE"), nullable=False)
+    documento_id: Mapped[int] = mapped_column(ForeignKey("lote_documentos.id", ondelete="RESTRICT"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    autor_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    pagina_inicio: Mapped[int] = mapped_column(Integer, nullable=False)
+    pagina_fin: Mapped[int] = mapped_column(Integer, nullable=False)
+    destino_path: Mapped[str] = mapped_column(Text, nullable=False)
+    tipo: Mapped[str] = mapped_column(String(20), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+
 class TramiteError(Base):
     __tablename__ = "tramite_errores"
     __table_args__ = (Index("idx_tramite_error_original", "original_path"),)
@@ -154,6 +223,7 @@ class TramiteError(Base):
     observacion: Mapped[str] = mapped_column(Text, nullable=False)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     lote_id: Mapped[int | None] = mapped_column(ForeignKey("lotes.id", ondelete="SET NULL"), index=True, nullable=True)
+    documento_id: Mapped[int | None] = mapped_column(ForeignKey("lote_documentos.id", ondelete="SET NULL"), index=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 

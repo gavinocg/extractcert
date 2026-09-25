@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { api } from '../api/client'
+import { api, ApiError } from '../api/client'
 import EnviarErroresModal from '../components/EnviarErroresModal'
 import { useToast } from '../store/toast'
 
-interface Registro { id: number; original_path: string; archivo: string; observacion: string; username: string; created_at: string | null }
+interface Registro { id: number; documento_id?: number | null; original_path: string; archivo: string; observacion: string; username: string; created_at: string | null }
 
 export default function Errores() {
   const [regs, setRegs] = useState<Registro[]>([])
@@ -20,7 +20,26 @@ export default function Errores() {
   useEffect(() => { void cargar(1) }, [])
 
   const toggle = (id: number) => setSel((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
-  const corregir = async (id: number) => { await api.del(`/api/errores/${id}`); toast('Corregido', 'success'); void cargar(pagina) }
+  const corregir = async (registro: Registro) => {
+    try {
+      let documentoId = registro.documento_id
+      if (!documentoId) {
+        const separator = Math.max(registro.original_path.lastIndexOf('/'), registro.original_path.lastIndexOf('\\'))
+        const directory = separator >= 0 ? registro.original_path.slice(0, separator) : ''
+        const dashboard = await api.get<{ items: Array<{ ruta: string; documento_id: number | null }> }>(`/api/dashboard?path=${encodeURIComponent(directory)}&tam=100`)
+        documentoId = dashboard.items.find((item) => item.ruta === registro.original_path)?.documento_id
+      }
+      if (!documentoId) throw new Error('El error no está ligado a un documento disponible')
+      const claim = await api.post<{ lease_token: string }>(`/api/lotes/documentos/${documentoId}/claim`, {})
+      await api.del(`/api/errores/${registro.id}?lease_token=${encodeURIComponent(claim.lease_token)}`)
+      toast('Corregido', 'success')
+      void cargar(pagina)
+      window.dispatchEvent(new Event('lotes:changed'))
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'No se pudo corregir', 'error')
+      if (error instanceof ApiError && (error.status === 409 || error.status === 403)) void cargar(pagina)
+    }
+  }
   const all = regs.length > 0 && regs.every((r) => sel.includes(r.id))
 
   return (
@@ -42,7 +61,7 @@ export default function Errores() {
                 <td className="px-3 py-2 font-mono text-xs">{r.archivo}</td>
                 <td className="px-3 py-2">{r.observacion}</td>
                 <td className="px-3 py-2">{r.username}</td>
-                <td className="px-3 py-2"><button onClick={() => corregir(r.id)} className="rounded bg-emerald-600 px-2 py-1 text-xs text-white">Corregido</button></td>
+                <td className="px-3 py-2"><button onClick={() => void corregir(r)} className="rounded bg-emerald-600 px-2 py-1 text-xs text-white">Corregido</button></td>
               </tr>
             ))}
             {regs.length === 0 && <tr><td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-400">Sin errores.</td></tr>}

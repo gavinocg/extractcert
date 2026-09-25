@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     smtp_pass: str = ""
     smtp_tls: bool = True
     smtp_from: str = ""
-    app_url: str = "http://localhost:5173"
+    app_url: str = "http://127.0.0.1:8001"
 
     @property
     def temp_dir(self) -> Path:

@@ -18,7 +18,7 @@ cd C:\laragon\www\extractcert
 .\run-dev.ps1      # arranca ambos en ventanas normales
 ```
 - API: http://127.0.0.1:8000  (docs en `/docs`)
-- SPA: http://localhost:5173  (Vite proxifica `/api` → 8000)
+- SPA: http://127.0.0.1:8001  (Vite proxifica `/api` → 8000)
 
 Primer arranque crea el venv, instala dependencias y siembra las settings por defecto. Antes de
 arrancar una versión nueva, aplique las migraciones desde `backend` con `alembic upgrade head`.
@@ -33,11 +33,11 @@ respondan los puertos, abre el navegador en la SPA y deja un menú de control:
 3) Cerrar ventana   -> deja los servidores corriendo y cierra esta ventana
 ```
 
-- Si los puertos 8000/5173 ya están activos, no los duplica: entra directo al menú.
+- Si los puertos 8000/8001 ya están activos, no los duplica: entra directo al menú.
 - Guarda los PIDs de los procesos raíz en `%TEMP%\ExtractCert\*.pid` para poder detenerlos después
   (o `taskkill /PID <pid> /T /F`).
-- "Detener"/"Reiniciar" matan también lo que escuche en 8000/5173 por defecto (compatible IPv4/IPv6
-  — Vite escucha en `::1`), aunque el servidor se haya levantado fuera del script.
+- "Detener"/"Reiniciar" matan también lo que escuche en 8000/8001 por defecto, aunque el servidor
+  se haya levantado fuera del script.
 
 > Nota: la opción **1) Detener** apaga todo por diseño; si la usas y luego la app da
 > "Failed to fetch", relanza con `.\start.ps1`.

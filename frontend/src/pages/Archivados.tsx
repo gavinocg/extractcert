@@ -31,6 +31,11 @@ function durationLabel(seconds: number | null) {
   return [days ? `${days} d` : '', hours ? `${hours} h` : '', `${minutes} min`].filter(Boolean).join(' ')
 }
 
+function withOperatorLabel(lote: Lote): Lote {
+  const names = lote.operadores.map((operator) => operator.nombre || operator.username).join(', ')
+  return names ? { ...lote, operador: { ...(lote.operador ?? lote.operadores[0]), nombre: names } } : lote
+}
+
 export default function Archivados() {
   const toast = useToast((state) => state.show)
   const [items, setItems] = useState<Lote[]>([])
@@ -41,7 +46,7 @@ export default function Archivados() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      setItems(await api.get<Lote[]>('/api/lotes?scope=archived'))
+      setItems((await api.get<Lote[]>('/api/lotes?scope=archived')).map(withOperatorLabel))
     } catch (error) {
       toast(error instanceof Error ? error.message : 'No se pudieron cargar los archivados', 'error')
     } finally {
@@ -54,7 +59,8 @@ export default function Archivados() {
   const openDetail = async (lote: Lote) => {
     setLoadingDetail(lote.id)
     try {
-      setDetail(await api.get<ArchiveSummary>(`/api/lotes/${lote.id}/archive-summary`))
+      const summary = await api.get<ArchiveSummary>(`/api/lotes/${lote.id}/archive-summary`)
+      setDetail({ ...summary, lote: withOperatorLabel(summary.lote) })
     } catch (error) {
       toast(error instanceof Error ? error.message : 'No se pudo cargar el resumen', 'error')
     } finally {

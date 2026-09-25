@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, ApiError } from '../api/client'
 import ProgressBar from '../components/ProgressBar'
+import OperatorMultiSelect from '../components/OperatorMultiSelect'
 import { useAuth } from '../store/auth'
 import { useToast } from '../store/toast'
 import type { Lote, Operador } from '../types/lotes'
@@ -35,7 +36,7 @@ export default function Lotes({ supervisionView = false }: { supervisionView?: b
   const [operatorStats, setOperatorStats] = useState<OperatorStats[]>([])
   const [operators, setOperators] = useState<Operador[]>([])
   const [reassigning, setReassigning] = useState<Lote | null>(null)
-  const [newOperatorId, setNewOperatorId] = useState(0)
+  const [newOperatorIds, setNewOperatorIds] = useState<number[]>([])
   const [operatorSearch, setOperatorSearch] = useState('')
   const [savingReassignment, setSavingReassignment] = useState(false)
   const requestGeneration = useRef(0)
@@ -77,7 +78,7 @@ export default function Lotes({ supervisionView = false }: { supervisionView?: b
     setOperatorStats([])
     setOperators([])
     setReassigning(null)
-    setNewOperatorId(0)
+    setNewOperatorIds([])
     setOperatorSearch('')
     setSavingReassignment(false)
     setNotifying(0)
@@ -112,6 +113,7 @@ export default function Lotes({ supervisionView = false }: { supervisionView?: b
       window.dispatchEvent(new Event('lotes:changed'))
     } catch (error) {
       toast(error instanceof Error ? error.message : 'No se pudo liberar el lote', 'error')
+      if (error instanceof ApiError && (error.status === 409 || error.status === 403)) await load()
     } finally {
       setReleasing(0)
     }
@@ -119,15 +121,15 @@ export default function Lotes({ supervisionView = false }: { supervisionView?: b
 
   const openReassignment = (lote: Lote) => {
     setReassigning(lote)
-    setNewOperatorId(lote.operador?.id || 0)
+    setNewOperatorIds(lote.operadores.map((operator) => operator.id))
     setOperatorSearch('')
   }
 
   const saveReassignment = async () => {
-    if (!reassigning || !newOperatorId) return
+    if (!reassigning || !newOperatorIds.length) return
     setSavingReassignment(true)
     try {
-      const response = await api.post<{ notificacion: { fallidos: string[]; sin_correo: boolean } }>('/api/lotes/asignar', { relative_path: reassigning.relative_path, operador_id: newOperatorId })
+      const response = await api.post<{ notificacion: { fallidos: string[]; sin_correo: boolean } }>('/api/lotes/asignar', { relative_path: reassigning.relative_path, operador_ids: newOperatorIds })
       if (response.notificacion.sin_correo) toast('Lote reasignado, pero el operador no tiene correo registrado', 'error')
       else if (response.notificacion.fallidos.length) toast(`Lote reasignado; no se pudo enviar a: ${response.notificacion.fallidos.join(', ')}`, 'error')
       else toast('Lote reasignado y correo enviado', 'success')
@@ -136,14 +138,11 @@ export default function Lotes({ supervisionView = false }: { supervisionView?: b
       window.dispatchEvent(new Event('lotes:changed'))
     } catch (error) {
       toast(error instanceof Error ? error.message : 'No se pudo reasignar el lote', 'error')
+      if (error instanceof ApiError && (error.status === 409 || error.status === 403)) { setReassigning(null); await load() }
     } finally {
       setSavingReassignment(false)
     }
   }
-
-  const filteredOperators = operators.filter((operator) =>
-    `${operator.nombre} ${operator.username}`.toLowerCase().includes(operatorSearch.toLowerCase()),
-  )
 
   const supervisor = user?.rol !== 'usuario'
   return (
@@ -181,8 +180,7 @@ export default function Lotes({ supervisionView = false }: { supervisionView?: b
                       <div className="truncate text-xs text-slate-400" title={lote.relative_path}>{lote.relative_path}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-slate-700">{lote.operador?.nombre || lote.operador?.username || 'Sin asignar'}</div>
-                      {lote.operador?.nombre && <div className="text-xs text-slate-400">@{lote.operador.username}</div>}
+                      {lote.operadores.length ? lote.operadores.map((operator) => <div key={operator.id} className="font-medium text-slate-700">{operator.nombre || operator.username} <span className="text-xs text-slate-400">@{operator.username}</span></div>) : <div className="text-slate-500">Sin asignar</div>}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${lote.estado === 'notificado' ? 'bg-blue-100 text-blue-700' : lote.estado === 'completado' ? 'bg-emerald-100 text-emerald-700' : lote.estado === 'en_progreso' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
@@ -264,7 +262,7 @@ export default function Lotes({ supervisionView = false }: { supervisionView?: b
               <div className="space-y-4 p-5">
                 <ProgressBar metricas={lote.metricas} />
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div><div className="text-xs text-slate-400">Operador</div><div className="font-medium text-slate-700">{lote.operador?.nombre || lote.operador?.username || 'Sin asignar'}</div></div>
+                   <div><div className="text-xs text-slate-400">Responsables</div><div className="font-medium text-slate-700">{lote.operadores.map((operator) => operator.nombre || operator.username).join(', ') || 'Sin asignar'}</div></div>
                   <div><div className="text-xs text-slate-400">Asignado</div><div className="font-medium text-slate-700">{dateLabel(lote.assigned_at)}</div></div>
                 </div>
                 <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">
@@ -290,11 +288,10 @@ export default function Lotes({ supervisionView = false }: { supervisionView?: b
               <p className="mt-1 truncate text-sm text-slate-500" title={reassigning.relative_path}>{reassigning.nombre}</p>
             </div>
             <div className="space-y-4 p-5">
-              <div><label className="mb-1 block text-sm font-medium text-slate-700">Buscar responsable</label><input autoFocus value={operatorSearch} onChange={(event) => setOperatorSearch(event.target.value)} placeholder="Nombre o usuario" className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" /></div>
-              <div><label className="mb-1 block text-sm font-medium text-slate-700">Nuevo responsable</label><select value={newOperatorId} onChange={(event) => setNewOperatorId(Number(event.target.value))} className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-blue-500"><option value="0">Seleccione un responsable</option>{filteredOperators.map((operator) => <option key={operator.id} value={operator.id}>{operator.nombre || operator.username} (@{operator.username})</option>)}</select></div>
+               <div><label className="mb-1 block text-sm font-medium text-slate-700">Responsables</label><OperatorMultiSelect operators={operators} selected={newOperatorIds} search={operatorSearch} onSearch={setOperatorSearch} onChange={setNewOperatorIds} /></div>
               <div className="rounded-lg bg-slate-50 px-4 py-3 text-xs text-slate-500">El avance y el historial del lote se conservarán. El nuevo responsable recibirá una notificación por correo.</div>
             </div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4"><button disabled={savingReassignment} onClick={() => setReassigning(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancelar</button><button disabled={!newOperatorId || savingReassignment || newOperatorId === reassigning.operador?.id} onClick={() => void saveReassignment()} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400">{savingReassignment ? 'Reasignando…' : 'Confirmar reasignación'}</button></div>
+             <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4"><button disabled={savingReassignment} onClick={() => setReassigning(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancelar</button><button disabled={!newOperatorIds.length || savingReassignment || newOperatorIds.length === reassigning.operadores.length && newOperatorIds.every((id) => reassigning.operadores.some((operator) => operator.id === id))} onClick={() => void saveReassignment()} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400">{savingReassignment ? 'Reasignando…' : 'Confirmar reasignación'}</button></div>
           </div>
         </div>
       )}

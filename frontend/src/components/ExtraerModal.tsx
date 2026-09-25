@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { api } from '../api/client'
+import { api, ApiError } from '../api/client'
 import ErrorModal from './ErrorModal'
 import PdfViewer, { PdfViewerHandle, Sel } from './PdfViewer'
 import { useToast } from '../store/toast'
 
 interface Props {
   ruta: string
+  documentoId: number
+  leaseToken: string
   ini?: number
   fin?: number
   extraccionId?: number
@@ -14,6 +16,7 @@ interface Props {
   onClose: () => void
   onGuardado: () => void
   onErrorSaved?: () => void
+  onLeaseLost?: () => void
 }
 
 interface PreviewResp {
@@ -23,7 +26,7 @@ interface PreviewResp {
   url: string
 }
 
-export default function ExtraerModal({ ruta, ini = 0, fin = 0, extraccionId = 0, reextra = false, error, onClose, onGuardado, onErrorSaved }: Props) {
+export default function ExtraerModal({ ruta, documentoId, leaseToken, ini = 0, fin = 0, extraccionId = 0, reextra = false, error, onClose, onGuardado, onErrorSaved, onLeaseLost }: Props) {
   const toast = useToast((s) => s.show)
   const nombre = decodeURIComponent(ruta.split('/').pop() ?? '')
   const original = `/api/pdf/original?ruta=${encodeURIComponent(ruta)}`
@@ -36,6 +39,41 @@ export default function ExtraerModal({ ruta, ini = 0, fin = 0, extraccionId = 0,
   const [showErrorModal, setShowErrorModal] = useState(false)
   const [errorLocal, setErrorLocal] = useState(error ?? null)
   const viewerRef = useRef<PdfViewerHandle>(null)
+  const leaseActive = useRef(true)
+  const releaseTimer = useRef<number | null>(null)
+  const idempotencyKey = useRef(crypto.randomUUID())
+  const closeRef = useRef(onClose)
+  const leaseLostRef = useRef(onLeaseLost)
+  closeRef.current = onClose
+  leaseLostRef.current = onLeaseLost
+
+  useEffect(() => {
+    if (releaseTimer.current !== null) {
+      window.clearTimeout(releaseTimer.current)
+      releaseTimer.current = null
+    }
+    leaseActive.current = true
+    const heartbeat = window.setInterval(() => {
+      if (!leaseActive.current) return
+      api.post(`/api/lotes/documentos/${documentoId}/heartbeat`, { lease_token: leaseToken }).catch((cause) => {
+        if (cause instanceof ApiError && (cause.status === 409 || cause.status === 403)) {
+          leaseActive.current = false
+          toast(cause.message, 'error')
+          leaseLostRef.current?.()
+          closeRef.current()
+        }
+      })
+    }, 4 * 60 * 1000)
+    return () => {
+      window.clearInterval(heartbeat)
+      releaseTimer.current = window.setTimeout(() => {
+        if (leaseActive.current) {
+          leaseActive.current = false
+          void api.post(`/api/lotes/documentos/${documentoId}/release`, { lease_token: leaseToken }).catch(() => undefined)
+        }
+      }, 150)
+    }
+  }, [documentoId, leaseToken, toast])
 
   useEffect(() => {
     setPred({ inicio: ini, fin })
@@ -50,11 +88,12 @@ export default function ExtraerModal({ ruta, ini = 0, fin = 0, extraccionId = 0,
     setBusyPre(true)
     try {
       const rot = viewerRef.current?.getRotation() ?? 0
-      const r = await api.post<PreviewResp>('/api/extracciones/preview', { ruta, inicio: pred.inicio, fin: pred.fin, rotacion: rot })
+      const r = await api.post<PreviewResp>('/api/extracciones/preview', { ruta, inicio: pred.inicio, fin: pred.fin, rotacion: rot, documento_id: documentoId, lease_token: leaseToken })
       setPrevUrl(r.url)
       setPrev(r)
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Error', 'error')
+      if (e instanceof ApiError && (e.status === 409 || e.status === 403)) { leaseActive.current = false; onLeaseLost?.(); onClose() }
     } finally {
       setBusyPre(false)
     }
@@ -71,12 +110,14 @@ export default function ExtraerModal({ ruta, ini = 0, fin = 0, extraccionId = 0,
     setBusyGuardar(true)
     try {
       const rot = viewerRef.current?.getRotation() ?? 0
-      const r = await api.post<{ nombre: string }>('/api/extracciones/guardar', { ruta, inicio: pred.inicio, fin: pred.fin, reextra: reextra ? 1 : 0, extraccion_id: extraccionId, rotacion: rot, ...(nombre ? { nombre } : {}) })
+      const r = await api.post<{ nombre: string }>('/api/extracciones/guardar', { ruta, inicio: pred.inicio, fin: pred.fin, reextra: reextra ? 1 : 0, extraccion_id: extraccionId, rotacion: rot, documento_id: documentoId, lease_token: leaseToken, idempotency_key: idempotencyKey.current, ...(nombre ? { nombre } : {}) })
+      leaseActive.current = false
       toast(`Extracción guardada: ${r.nombre}`, 'success')
       onGuardado()
       onClose()
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Error', 'error')
+      if (e instanceof ApiError && (e.status === 409 || e.status === 403)) { leaseActive.current = false; onLeaseLost?.(); onClose() }
       setBusyGuardar(false)
     }
   }
@@ -95,13 +136,24 @@ export default function ExtraerModal({ ruta, ini = 0, fin = 0, extraccionId = 0,
   const isPreview = !!prev
 
   const guardarError = async (obs: string) => {
-    await api.post('/api/errores', { ruta, observacion: obs })
-    toast('Error guardado', 'success')
-    const nueva = { id: errorLocal?.id ?? Date.now(), observacion: obs, username: null }
-    setErrorLocal(nueva as never)
-    setShowErrorModal(false)
-    onErrorSaved?.()
-    onClose()
+    try {
+      await api.post('/api/errores', { ruta, observacion: obs, documento_id: documentoId, lease_token: leaseToken })
+      leaseActive.current = false
+      toast('Error guardado', 'success')
+      const nueva = { id: errorLocal?.id ?? Date.now(), observacion: obs, username: null }
+      setErrorLocal(nueva as never)
+      setShowErrorModal(false)
+      onErrorSaved?.()
+      onClose()
+    } catch (cause) {
+      toast(cause instanceof Error ? cause.message : 'No se pudo guardar el error', 'error')
+      if (cause instanceof ApiError && (cause.status === 409 || cause.status === 403)) {
+        leaseActive.current = false
+        onLeaseLost?.()
+        onClose()
+      }
+      throw cause
+    }
   }
 
   return (
@@ -126,7 +178,7 @@ export default function ExtraerModal({ ruta, ini = 0, fin = 0, extraccionId = 0,
           </div>
         )}
 
-        {reextra && !isPreview && <div className="mx-5 mt-3 rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-700">Modo re-extracción: se sobrescribirá el archivo generado.</div>}
+        {reextra && !isPreview && <div className="mx-5 mt-3 rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-700">Modo re-extracción: se creará una nueva versión y se conservará el historial.</div>}
 
         {!isPreview ? (
           <>

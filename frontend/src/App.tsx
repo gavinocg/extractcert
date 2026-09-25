@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './store/auth'
 import Layout from './components/Layout'
 import { ToastHost } from './components/Toast'
+import LoadingOverlay from './components/LoadingOverlay'
 import Login from './pages/Login'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -80,6 +81,7 @@ export default function App() {
     <>
       <RouteLoader />
       <ToastHost />
+      <LoadingOverlay />
     </>
   )
 }

@@ -32,8 +32,8 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def validate_password(plain: str, username: str, current_hash: str | None = None) -> None:
     size = len(plain.encode("utf-8"))
-    if len(plain) < 10:
-        raise ValueError("La contraseña debe tener al menos 10 caracteres.")
+    if len(plain) < 6:
+        raise ValueError("La contraseña debe tener al menos 6 caracteres.")
     if size > 72:
         raise ValueError("La contraseña no puede superar 72 bytes.")
     if plain.casefold() in COMMON_PASSWORDS:

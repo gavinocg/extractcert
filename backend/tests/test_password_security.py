@@ -75,6 +75,10 @@ def test_politica_cuenta_bytes_y_rechaza_password_actual():
         security.validate_password("ñ" * 40, "persona")
 
 
+def test_politica_acepta_exactamente_seis_caracteres():
+    security.validate_password("Ab1!xy", "persona")
+
+
 def test_cambio_password_incrementa_version_y_reemite_cookie():
     db = database()
     row = user(db, must_change_password=True)

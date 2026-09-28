@@ -9,7 +9,7 @@ export function authRedirect(user: User, pathname: string): string | null {
 }
 
 export function passwordPolicyError(password: string, username: string): string | null {
-  if (password.length < 10) return 'La contraseña debe tener al menos 10 caracteres.'
+  if (password.length < 6) return 'La contraseña debe tener al menos 6 caracteres.'
   if (new TextEncoder().encode(password).length > 72) return 'La contraseña no puede superar 72 bytes.'
   if (username && password.toLocaleLowerCase().includes(username.toLocaleLowerCase())) {
     return 'La contraseña no puede contener tu nombre de usuario.'

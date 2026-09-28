@@ -216,7 +216,7 @@ Fecha de inicio: 2026-09-24
 - Migracion `20260928_12`: obligacion de cambio, fecha y version de token.
 - Usuarios nuevos requieren cambio por defecto; existentes no se bloquean automaticamente.
 - Sesion restringida backend/frontend hasta actualizar la contrasena.
-- Politica de 10 caracteres y maximo 72 bytes, sin username ni claves comunes.
+- Politica de 6 caracteres y maximo 72 bytes, sin username ni claves comunes.
 - Reset/forzado/cambio incrementan version JWT e invalidan sesiones anteriores.
 - Cookies Secure en produccion HTTPS y auditoria sin secretos.
 - Plan de pruebas en `PASSWORD_SECURITY_TEST_PLAN.md`.

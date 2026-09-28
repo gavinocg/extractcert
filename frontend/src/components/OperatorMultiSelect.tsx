@@ -16,7 +16,9 @@ export default function OperatorMultiSelect({ operators, selected, search, onSea
   const visible = operators.filter((operator) =>
     `${operator.nombre} ${operator.username}`.toLowerCase().includes(search.trim().toLowerCase()),
   )
-  const toggle = (id: number) => onChange(selected.includes(id) ? selected.filter((item) => item !== id) : [...selected, id])
+  const selectedSet = new Set(selected)
+  const operatorById = new Map(operators.map((operator) => [operator.id, operator]))
+  const toggle = (id: number) => onChange(selectedSet.has(id) ? selected.filter((item) => item !== id) : [...selected, id])
 
   useEffect(() => {
     if (!open) return
@@ -38,7 +40,7 @@ export default function OperatorMultiSelect({ operators, selected, search, onSea
         <div className="max-h-56 overflow-auto p-1">
           {visible.map((operator) => (
             <label key={operator.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-blue-50">
-              <input type="checkbox" checked={selected.includes(operator.id)} onChange={() => toggle(operator.id)} className="h-4 w-4 accent-blue-600" />
+              <input type="checkbox" checked={selectedSet.has(operator.id)} onChange={() => toggle(operator.id)} className="h-4 w-4 accent-blue-600" />
               <span className="min-w-0 truncate">{operator.nombre || operator.username} <span className="text-slate-400">@{operator.username}</span></span>
             </label>
           ))}
@@ -48,7 +50,7 @@ export default function OperatorMultiSelect({ operators, selected, search, onSea
       </div>}
       <div className="flex min-h-6 flex-wrap gap-1">
         {selected.map((id) => {
-          const operator = operators.find((item) => item.id === id)
+          const operator = operatorById.get(id)
           return operator ? <span key={id} className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700">{operator.nombre || operator.username}<button type="button" disabled={disabled} onClick={() => toggle(id)} className="font-bold text-blue-400 hover:text-blue-700" aria-label={`Quitar ${operator.nombre || operator.username}`}>×</button></span> : null
         })}
       </div>

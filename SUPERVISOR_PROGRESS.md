@@ -193,6 +193,16 @@ Fecha de inicio: 2026-09-24
 - Navegacion incluye total, rango mostrado, Anterior y Siguiente.
 - Medicion local: 5 carpetas finales con metricas en aproximadamente 1.8 segundos.
 
+## Boost general de rendimiento
+
+- Eliminado N+1 de sincronizacion documental; 100 PDF usan maximo 7 SELECT.
+- Metricas y productividad usan consultas agregadas sin filesystem en listados.
+- Eager loading elimina lazy queries de responsables y miembros.
+- Migracion `20260928_11` agrega indices compuestos para consultas criticas.
+- Frontend cancela requests obsoletos, deduplica GET y carga PDF.js bajo demanda.
+- Resultado local: Supervisión 12.7 ms, Productividad 9.7 ms, Contadores 3.2 ms, árbol paginado 392 ms.
+- Informe detallado en `PERFORMANCE_REPORT.md`.
+
 ## Archivados
 
 - Los lotes notificados al 100% salen de Supervision y pasan a Archivados.

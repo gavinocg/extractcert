@@ -5,7 +5,7 @@ from hashlib import sha256
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException, status
-from sqlalchemy import or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -87,13 +87,18 @@ def sync_documentos(db: Session, lote: Lote) -> list[LoteDocumento]:
     directory = absolute_path(db, lote.relative_path)
     names = fs.listar_pdfs(directory) if os.path.isdir(directory) else []
     rows = {row.document_key: row for row in db.query(LoteDocumento).filter(LoteDocumento.lote_id == lote.id).all()}
-    extraction_by_key = {
-        document_key(lote.id, item.original_path): item
-        for item in db.query(Extraccion).filter(Extraccion.lote_id == lote.id).order_by(Extraccion.processed_at).all()
-    }
-    error_by_key = {
-        document_key(lote.id, item.original_path): item
-        for item in db.query(TramiteError).filter(TramiteError.lote_id == lote.id).order_by(TramiteError.updated_at).all()
+    extractions = db.query(Extraccion).filter(Extraccion.lote_id == lote.id).order_by(Extraccion.processed_at).all()
+    errors = db.query(TramiteError).filter(TramiteError.lote_id == lote.id).order_by(TramiteError.updated_at).all()
+    extraction_by_key = {document_key(lote.id, item.original_path): item for item in extractions}
+    extraction_by_document = {item.documento_id: item for item in extractions if item.documento_id is not None}
+    error_by_key = {document_key(lote.id, item.original_path): item for item in errors}
+    error_by_document = {item.documento_id: item for item in errors if item.documento_id is not None}
+    versioned_extractions = {
+        extraction_id for (extraction_id,) in db.query(ExtraccionVersion.extraccion_id).filter(
+            ExtraccionVersion.extraccion_id == Extraccion.id,
+            Extraccion.lote_id == lote.id,
+            ExtraccionVersion.version == 1,
+        ).all()
     }
     current = set()
     for name in names:
@@ -114,8 +119,8 @@ def sync_documentos(db: Session, lote: Lote) -> list[LoteDocumento]:
         stat = os.stat(path)
         replaced = row.source_size is not None and (row.source_size != stat.st_size or row.source_mtime_ns != stat.st_mtime_ns)
         row.source_size, row.source_mtime_ns = stat.st_size, stat.st_mtime_ns
-        extraction = db.query(Extraccion).filter(Extraccion.documento_id == row.id).order_by(Extraccion.processed_at.desc()).first() or extraction_by_key.get(key)
-        error = db.query(TramiteError).filter(TramiteError.documento_id == row.id).first() or error_by_key.get(key)
+        extraction = extraction_by_document.get(row.id) or extraction_by_key.get(key)
+        error = error_by_document.get(row.id) or error_by_key.get(key)
         source_mtime = datetime.fromtimestamp(stat.st_mtime)
         if replaced:
             clear_lease(row)
@@ -127,19 +132,26 @@ def sync_documentos(db: Session, lote: Lote) -> list[LoteDocumento]:
         if extraction:
             extraction.documento_id = row.id
             legacy_key = f"legacy:{extraction.id}"
-            if not db.query(ExtraccionVersion.id).filter(ExtraccionVersion.extraccion_id == extraction.id, ExtraccionVersion.version == 1).first():
-                db.add(ExtraccionVersion(
-                    extraccion_id=extraction.id,
-                    documento_id=row.id,
-                    version=1,
-                    autor_id=extraction.user_id,
-                    pagina_inicio=extraction.pagina_inicio,
-                    pagina_fin=extraction.pagina_fin,
-                    destino_path=extraction.destino_path,
-                    tipo=extraction.estado,
-                    idempotency_key=legacy_key,
-                    created_at=extraction.processed_at,
-                ))
+            if extraction.id not in versioned_extractions:
+                try:
+                    with db.begin_nested():
+                        db.add(ExtraccionVersion(
+                            extraccion_id=extraction.id,
+                            documento_id=row.id,
+                            version=1,
+                            autor_id=extraction.user_id,
+                            pagina_inicio=extraction.pagina_inicio,
+                            pagina_fin=extraction.pagina_fin,
+                            destino_path=extraction.destino_path,
+                            tipo=extraction.estado,
+                            idempotency_key=legacy_key,
+                            created_at=extraction.processed_at,
+                        ))
+                        db.flush()
+                except IntegrityError:
+                    # Otro sincronizador pudo crear la misma versión legacy.
+                    pass
+                versioned_extractions.add(extraction.id)
             row.estado, row.completed_by, row.completed_at = "completado", extraction.user_id, extraction.processed_at
             row.version = max(row.version, 1)
         elif error:
@@ -206,6 +218,25 @@ def metricas(db: Session, lote: Lote) -> dict:
     }
 
 
+def metricas_db(db: Session, lote: Lote | int) -> dict:
+    """Calcula métricas del inventario persistido sin tocar filesystem ni estado."""
+    lote_id = lote if isinstance(lote, int) else lote.id
+    total, realizados, errores = db.query(
+        func.count(LoteDocumento.id),
+        func.sum(case((LoteDocumento.estado == "completado", 1), else_=0)),
+        func.sum(case((LoteDocumento.estado == "error", 1), else_=0)),
+    ).filter(LoteDocumento.lote_id == lote_id, LoteDocumento.presente.is_(True)).one()
+    total, realizados, errores = int(total or 0), int(realizados or 0), int(errores or 0)
+    pendientes = max(0, total - realizados - errores)
+    return {
+        "total": total,
+        "realizados": realizados,
+        "errores": errores,
+        "pendientes": pendientes,
+        "porcentaje": round((realizados + errores) * 100 / total) if total else 0,
+    }
+
+
 def metricas_directorio(db: Session, relative: str, nombre: str = "") -> dict:
     lote = db.query(Lote).filter(Lote.relative_path == relative).first()
     if lote is not None:
@@ -240,8 +271,8 @@ def sync_estado(db: Session, lote: Lote, stats: dict | None = None) -> dict:
     return stats
 
 
-def serialize(db: Session, lote: Lote) -> dict:
-    stats = sync_estado(db, lote)
+def serialize(db: Session, lote: Lote, stats: dict | None = None, reconcile: bool = False) -> dict:
+    stats = sync_estado(db, lote, stats) if reconcile else (stats or metricas_db(db, lote))
     return {
         "id": lote.id,
         "nombre": lote.nombre,

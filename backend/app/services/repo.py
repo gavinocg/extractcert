@@ -3,6 +3,7 @@ import os
 import time
 import base64
 import hashlib
+import threading
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -11,6 +12,10 @@ from sqlalchemy.orm import Session
 from ..core.config import settings
 from ..db.models import Setting
 from . import fs
+
+
+_temp_cleanup_lock = threading.Lock()
+_last_temp_cleanup: float | None = None
 
 
 def _get_setting(db: Session, clave: str, default: str) -> str:
@@ -91,10 +96,16 @@ def new_temp_filename(user_id: int, prefix: str = "prev") -> Path:
 
 
 def limpiar_temporales(max_mins: int = 90) -> None:
-    now = time.time()
-    for f in settings.temp_dir.glob("prev_*.pdf"):
-        try:
-            if (now - f.stat().st_mtime) > max_mins * 60:
-                f.unlink(missing_ok=True)
-        except OSError:
-            pass
+    global _last_temp_cleanup
+    with _temp_cleanup_lock:
+        monotonic_now = time.monotonic()
+        if _last_temp_cleanup is not None and monotonic_now - _last_temp_cleanup < 600:
+            return
+        now = time.time()
+        for f in settings.temp_dir.glob("prev_*.pdf"):
+            try:
+                if (now - f.stat().st_mtime) > max_mins * 60:
+                    f.unlink(missing_ok=True)
+            except OSError:
+                pass
+        _last_temp_cleanup = time.monotonic()

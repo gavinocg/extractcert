@@ -27,7 +27,7 @@ export default function ErrorModal({ archivo, observacionInicial = '', onClose, 
 
   useEffect(() => {
     let viva = true
-    api.get<Observacion[]>('/api/observaciones').then((lista) => {
+    api.get<Observacion[]>('/api/observaciones', { cacheTtl: 60_000 }).then((lista) => {
       if (!viva) return
       setCatalogo(lista)
       const ini = observacionInicial.trim()

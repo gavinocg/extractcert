@@ -80,7 +80,8 @@ def dashboard(
             base_item.update({"estado": "pendiente", "extraccion_id": None, "destino_path": None, "pagina_inicio": None, "pagina_fin": None, "fecha": err.updated_at.isoformat() if err and err.updated_at else None})
         items_all.append(base_item)
 
-    user_map = {u.id: u for u in db.query(User).all()}
+    user_ids = {row.user_id for row in rows_all} | {row.user_id for row in errores_all}
+    user_map = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
     for it in items_all:
         if it["extraccion_id"] is not None:
             reg = extraidos_map.get(fs.filename_key(it["nombre"]))

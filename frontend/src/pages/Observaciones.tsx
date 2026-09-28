@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../api/client'
+import { api, invalidateApiCache } from '../api/client'
 import { useToast } from '../store/toast'
 
 interface Observacion { id: number; descripcion: string; orden: number }
@@ -11,7 +11,7 @@ export default function Observaciones() {
   const [edit, setEdit] = useState<Observacion | null>(null)
   const toast = useToast((s) => s.show)
 
-  const cargar = async () => setLista(await api.get<Observacion[]>('/api/observaciones'))
+  const cargar = async () => setLista(await api.get<Observacion[]>('/api/observaciones', { cacheTtl: 60_000 }))
   useEffect(() => { void cargar() }, [])
 
   const guardar = async () => {
@@ -20,9 +20,9 @@ export default function Observaciones() {
     if (Number.isNaN(nOrden)) { toast('Orden debe ser número', 'error'); return }
     if (edit) await api.put(`/api/observaciones/${edit.id}`, { descripcion, orden: nOrden })
     else await api.post('/api/observaciones', { descripcion, orden: nOrden })
-    toast('Guardado', 'success'); setDescripcion(''); setOrden('0'); setEdit(null); void cargar()
+    invalidateApiCache('/api/observaciones'); toast('Guardado', 'success'); setDescripcion(''); setOrden('0'); setEdit(null); void cargar()
   }
-  const eliminar = async (id: number) => { await api.del(`/api/observaciones/${id}`); toast('Eliminado', 'success'); void cargar() }
+  const eliminar = async (id: number) => { await api.del(`/api/observaciones/${id}`); invalidateApiCache('/api/observaciones'); toast('Eliminado', 'success'); void cargar() }
   const editar = (o: Observacion) => { setEdit(o); setDescripcion(o.descripcion); setOrden(String(o.orden)) }
 
   return (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../store/toast'
 import type { Lote } from '../types/lotes'
@@ -42,6 +42,7 @@ export default function Archivados() {
   const [loading, setLoading] = useState(true)
   const [detail, setDetail] = useState<ArchiveSummary | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(0)
+  const detailController = useRef<AbortController | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -54,17 +55,24 @@ export default function Archivados() {
     }
   }, [toast])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    void load()
+    return () => detailController.current?.abort()
+  }, [load])
 
   const openDetail = async (lote: Lote) => {
+    detailController.current?.abort()
+    const controller = new AbortController()
+    detailController.current = controller
     setLoadingDetail(lote.id)
     try {
-      const summary = await api.get<ArchiveSummary>(`/api/lotes/${lote.id}/archive-summary`)
+      const summary = await api.get<ArchiveSummary>(`/api/lotes/${lote.id}/archive-summary`, { signal: controller.signal })
+      if (controller.signal.aborted) return
       setDetail({ ...summary, lote: withOperatorLabel(summary.lote) })
     } catch (error) {
-      toast(error instanceof Error ? error.message : 'No se pudo cargar el resumen', 'error')
+      if (!(error instanceof DOMException && error.name === 'AbortError')) toast(error instanceof Error ? error.message : 'No se pudo cargar el resumen', 'error')
     } finally {
-      setLoadingDetail(0)
+      if (!controller.signal.aborted) setLoadingDetail(0)
     }
   }
 

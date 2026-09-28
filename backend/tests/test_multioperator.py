@@ -1,15 +1,18 @@
 from datetime import datetime, timedelta
 import os
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
 from app.db.database import Base
 from app.db.models import Extraccion, ExtraccionVersion, Lote, LoteDocumento, LoteOperador, User
 from app.routers import extraccion as extraction_router
+from app.routers import lotes as lotes_router
 from app.services import lotes
+from app.services import repo
 
 
 def database() -> Session:
@@ -160,3 +163,130 @@ def test_lease_vigente_cuenta_aunque_documento_este_completado():
 
     active = db.query(LoteDocumento.id).filter(LoteDocumento.lote_id == lote.id, LoteDocumento.lease_expires_at > datetime.now()).first()
     assert active is not None
+
+
+def test_sync_documentos_selects_constantes_para_cien_documentos(tmp_path, monkeypatch):
+    folder = tmp_path / "lote"
+    folder.mkdir()
+    db = database()
+    _, _, lote, _ = fixture_rows(db)
+    lote_id = lote.id
+    db.query(LoteDocumento).delete(synchronize_session=False)
+    db.commit()
+    db.expunge_all()
+    lote = db.get(Lote, lote_id)
+    for index in range(100):
+        name = f"{index:03}.pdf"
+        (folder / name).write_bytes(b"pdf")
+        db.add(LoteDocumento(
+            lote_id=lote.id,
+            document_key=lotes.document_key(lote.id, name),
+            relative_path=name,
+            nombre=name,
+        ))
+    db.commit()
+    monkeypatch.setattr(lotes, "raiz_origen", lambda _: str(tmp_path))
+    selects = 0
+
+    def count_selects(_conn, _cursor, statement, _parameters, _context, _executemany):
+        nonlocal selects
+        if statement.lstrip().upper().startswith("SELECT"):
+            selects += 1
+
+    event.listen(db.get_bind(), "before_cursor_execute", count_selects)
+    try:
+        rows = lotes.sync_documentos(db, lote)
+    finally:
+        event.remove(db.get_bind(), "before_cursor_execute", count_selects)
+
+    assert len(rows) == 100
+    assert selects <= 7
+
+
+def test_metricas_db_preserva_payload_sin_reconciliar(tmp_path, monkeypatch):
+    db = database()
+    _, _, lote, document = fixture_rows(db)
+    document.estado = "completado"
+    db.commit()
+    monkeypatch.setattr(lotes.fs, "listar_pdfs", lambda _: pytest.fail("no debe leer filesystem"))
+
+    assert lotes.metricas_db(db, lote) == {
+        "total": 1, "realizados": 1, "errores": 0, "pendientes": 0, "porcentaje": 100
+    }
+
+
+def test_sync_estado_con_metricas_db_actualiza_lote_sin_filesystem(monkeypatch):
+    db = database()
+    _, _, lote, document = fixture_rows(db)
+    monkeypatch.setattr(lotes.fs, "listar_pdfs", lambda _: pytest.fail("no debe leer filesystem"))
+
+    document.estado = "completado"
+    db.flush()
+    lotes.sync_estado(db, lote, lotes.metricas_db(db, lote))
+    assert lote.estado == "completado"
+
+    document.estado = "pendiente"
+    db.flush()
+    lotes.sync_estado(db, lote, lotes.metricas_db(db, lote))
+    assert lote.estado == "asignado"
+    assert lote.completed_at is None
+
+
+def test_operator_stats_no_colapsa_lotes_vacios_del_mismo_operador():
+    db = database()
+    operator = User(username="empty", password_hash="x", rol="usuario")
+    supervisor = User(username="super", password_hash="x", rol="supervisor")
+    db.add_all((operator, supervisor))
+    db.flush()
+    first = Lote(relative_path="empty-1", nombre="empty-1", operador_id=operator.id)
+    second = Lote(relative_path="empty-2", nombre="empty-2", operador_id=operator.id)
+    db.add_all((first, second))
+    db.flush()
+    db.add_all((LoteOperador(lote_id=first.id, operador_id=operator.id), LoteOperador(lote_id=second.id, operador_id=operator.id)))
+    db.commit()
+
+    result = lotes_router.operator_stats(supervisor, db)
+    stats = next(item for item in result if item["id"] == operator.id)
+
+    assert stats["lotes_asignados"] == 2
+    assert stats["total"] == 0
+
+
+def test_limpieza_temporal_ejecuta_primero_y_throttlea(tmp_path, monkeypatch):
+    old = tmp_path / "prev_old.pdf"
+    old.write_bytes(b"pdf")
+    os.utime(old, (0, 0))
+    monkeypatch.setattr(repo, "settings", SimpleNamespace(temp_dir=tmp_path))
+    monkeypatch.setattr(repo, "_last_temp_cleanup", None)
+
+    repo.limpiar_temporales()
+    assert not old.exists()
+
+    recent = tmp_path / "prev_recent.pdf"
+    recent.write_bytes(b"pdf")
+    os.utime(recent, (0, 0))
+    repo.limpiar_temporales()
+    assert recent.exists()
+
+
+def test_limpieza_temporal_permite_retry_si_falla(tmp_path, monkeypatch):
+    class FallaUnaVez:
+        def __init__(self):
+            self.failed = False
+
+        def glob(self, pattern):
+            if not self.failed:
+                self.failed = True
+                raise OSError("temporalmente inaccesible")
+            return tmp_path.glob(pattern)
+
+    directory = FallaUnaVez()
+    monkeypatch.setattr(repo, "settings", SimpleNamespace(temp_dir=directory))
+    monkeypatch.setattr(repo, "_last_temp_cleanup", None)
+
+    with pytest.raises(OSError):
+        repo.limpiar_temporales()
+    assert repo._last_temp_cleanup is None
+
+    repo.limpiar_temporales()
+    assert repo._last_temp_cleanup is not None

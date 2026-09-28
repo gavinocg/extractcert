@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { useAuth } from '../store/auth'
 
@@ -30,20 +30,28 @@ export default function Historial() {
   const [usuario, setUsuario] = useState(0)
   const [pagina, setPagina] = useState(1)
   const [err, setErr] = useState('')
+  const requestGeneration = useRef(0)
+  const loadController = useRef<AbortController | null>(null)
 
   const cargar = useCallback(async (uid: number, pg: number) => {
+    const generation = ++requestGeneration.current
+    loadController.current?.abort()
+    const controller = new AbortController()
+    loadController.current = controller
     try {
       const params = new URLSearchParams()
       if (uid) params.set('usuario', String(uid))
       params.set('pagina', String(pg))
-      setData(await api.get<Hist>('/api/historial?' + params.toString()))
+      const result = await api.get<Hist>('/api/historial?' + params.toString(), { signal: controller.signal })
+      if (generation === requestGeneration.current) setData(result)
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Error')
+      if (generation === requestGeneration.current && !(e instanceof DOMException && e.name === 'AbortError')) setErr(e instanceof Error ? e.message : 'Error')
     }
   }, [])
 
   useEffect(() => {
     void cargar(usuario, pagina)
+    return () => { ++requestGeneration.current; loadController.current?.abort() }
   }, [cargar, usuario, pagina])
 
   const totalPaginas = data ? Math.max(1, Math.ceil(data.total / data.tam)) : 1

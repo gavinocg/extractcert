@@ -71,7 +71,10 @@ class Lote(Base):
 
 class LoteOperador(Base):
     __tablename__ = "lote_operadores"
-    __table_args__ = (Index("uq_lote_operador", "lote_id", "operador_id", unique=True),)
+    __table_args__ = (
+        Index("uq_lote_operador", "lote_id", "operador_id", unique=True),
+        Index("ix_lote_operadores_operador_activo_lote", "operador_id", "activo", "lote_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     lote_id: Mapped[int] = mapped_column(ForeignKey("lotes.id", ondelete="CASCADE"), nullable=False)
@@ -91,6 +94,8 @@ class LoteDocumento(Base):
         Index("uq_lote_document_key", "lote_id", "document_key", unique=True),
         Index("ix_lote_documentos_estado", "lote_id", "estado"),
         Index("ix_lote_documentos_lease", "lease_expires_at"),
+        Index("ix_lote_documentos_lote_lease", "lote_id", "lease_expires_at"),
+        Index("ix_lote_documentos_completed_estado_presente", "completed_by", "estado", "presente"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -117,7 +122,10 @@ class LoteDocumento(Base):
 
 class LoteAsignacionHistorial(Base):
     __tablename__ = "lote_asignaciones_historial"
-    __table_args__ = (Index("ix_lote_historial_lote", "lote_id", "assigned_at"),)
+    __table_args__ = (
+        Index("ix_lote_historial_lote", "lote_id", "assigned_at"),
+        Index("ix_lote_historial_lote_operador_unassigned", "lote_id", "operador_id", "unassigned_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     lote_id: Mapped[int] = mapped_column(ForeignKey("lotes.id", ondelete="CASCADE"), nullable=False)
@@ -166,6 +174,10 @@ class Extraccion(Base):
     __tablename__ = "extracciones"
     __table_args__ = (
         Index("idx_extracciones_original", "original_path"),
+        Index("ix_extracciones_lote_processed", "lote_id", "processed_at"),
+        Index("ix_extracciones_documento_processed", "documento_id", "processed_at"),
+        Index("ix_extracciones_user_created_id", "user_id", "created_at", "id"),
+        Index("ix_extracciones_created_id", "created_at", "id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -198,7 +210,11 @@ class Extraccion(Base):
 
 class ExtraccionVersion(Base):
     __tablename__ = "extraccion_versiones"
-    __table_args__ = (Index("uq_extraccion_version", "extraccion_id", "version", unique=True),)
+    __table_args__ = (
+        Index("uq_extraccion_version", "extraccion_id", "version", unique=True),
+        Index("ix_extraccion_versiones_autor_created", "autor_id", "created_at"),
+        Index("ix_extraccion_versiones_documento_version", "documento_id", "version"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     extraccion_id: Mapped[int] = mapped_column(ForeignKey("extracciones.id", ondelete="CASCADE"), nullable=False)
@@ -215,7 +231,10 @@ class ExtraccionVersion(Base):
 
 class TramiteError(Base):
     __tablename__ = "tramite_errores"
-    __table_args__ = (Index("idx_tramite_error_original", "original_path"),)
+    __table_args__ = (
+        Index("idx_tramite_error_original", "original_path"),
+        Index("ix_tramite_errores_lote_updated", "lote_id", "updated_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     original_path: Mapped[str] = mapped_column(String(500), nullable=False, unique=True)

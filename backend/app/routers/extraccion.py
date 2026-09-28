@@ -129,26 +129,40 @@ def guardar(
     pedido = os.path.basename(body.nombre.strip()) if body.nombre else os.path.basename(original)
     if not pedido.lower().endswith(".pdf"): pedido += ".pdf"
     if len(pedido) > 255: raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nombre demasiado largo.")
-    version_dir = fs.unir(
-        fs.unir(fs.unir(raiz_repo(db), f"lote-{lote_id}"), f"documento-{documento.id}"),
-        f"v{version}",
-    )
-    os.makedirs(version_dir, exist_ok=True)
-    destino = fs.unir(version_dir, pedido)
-    if os.path.exists(destino):
-        confirmed = db.query(ExtraccionVersion.id).filter(ExtraccionVersion.documento_id == documento.id, ExtraccionVersion.version == version).first()
-        if confirmed:
-            raise HTTPException(status.HTTP_409_CONFLICT, "La versión ya está confirmada.")
-        os.remove(destino)
+    repo = raiz_repo(db)
+    os.makedirs(repo, exist_ok=True)
+    if not os.access(repo, os.W_OK):
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Destino no escribible.")
+    reserved_new = False
+    previous_destination = reg.destino_path if reg else None
+    if reg:
+        # La reextracción conserva el nombre final y reemplaza ese archivo.
+        destino = fs.unir(repo, os.path.basename(reg.destino_path))
+    else:
+        # Reserva exclusiva para evitar que dos extracciones nuevas elijan el
+        # mismo nombre entre la comprobación y la escritura.
+        while True:
+            destino = fs.unir(repo, generar_nombre_sin_colision(repo, pedido))
+            try:
+                descriptor = os.open(destino, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.close(descriptor)
+                reserved_new = True
+                break
+            except FileExistsError:
+                continue
 
     rot2 = int(body.rotacion) % 360 if hasattr(body, 'rotacion') else 0
     temp_output = f"{destino}.tmp-{uuid4().hex}"
+    backup = None
     installed = False
     committed = False
     try:
         extraer_paginas(original, body.inicio, body.fin, temp_output, rotacion=rot2)
         if not os.path.isfile(temp_output) or os.path.getsize(temp_output) == 0:
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "No se pudo generar el archivo.")
+        if reg and os.path.isfile(destino):
+            backup = f"{destino}.bak-{uuid4().hex}"
+            os.replace(destino, backup)
         os.replace(temp_output, destino)
         installed = True
 
@@ -194,8 +208,13 @@ def guardar(
     except IntegrityError:
         db.rollback()
         existing = db.query(ExtraccionVersion).filter(ExtraccionVersion.idempotency_key == body.idempotency_key).first()
-        if installed and os.path.exists(destino) and (not existing or fs.normalizar(existing.destino_path) != fs.normalizar(destino)):
-            os.remove(destino)
+        if not existing or fs.normalizar(existing.destino_path) != fs.normalizar(destino):
+            if installed and os.path.exists(destino):
+                os.remove(destino)
+            if backup and os.path.exists(backup):
+                os.replace(backup, destino)
+            elif reserved_new and os.path.exists(destino):
+                os.remove(destino)
         if existing and existing.documento_id == body.documento_id and existing.autor_id == user.id:
             return _version_response(existing)
         raise HTTPException(status.HTTP_409_CONFLICT, "La idempotency key pertenece a otra operación.")
@@ -207,10 +226,24 @@ def guardar(
             os.remove(temp_output)
         if installed and os.path.exists(destino):
             os.remove(destino)
+        if backup and os.path.exists(backup):
+            os.replace(backup, destino)
+        elif reserved_new and os.path.exists(destino):
+            os.remove(destino)
         raise
 
     # El archivo y la fila ya son definitivos. Un fallo de limpieza no debe
     # compensar una transacción confirmada ni convertir el éxito en error.
+    if backup and os.path.exists(backup):
+        try:
+            os.remove(backup)
+        except OSError:
+            pass
+    if previous_destination and fs.normalizar(previous_destination) != fs.normalizar(destino) and os.path.isfile(previous_destination):
+        try:
+            os.remove(previous_destination)
+        except OSError:
+            pass
     return _version_response(saved_version)
 
 

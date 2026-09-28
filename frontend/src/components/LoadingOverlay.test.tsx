@@ -5,11 +5,11 @@ import LoadingOverlay from './LoadingOverlay'
 describe('LoadingOverlay', () => {
   afterEach(() => vi.useRealTimers())
 
-  it('solo aparece después de 1000 ms y espera todas las solicitudes', () => {
+  it('solo aparece después de 4000 ms y espera todas las solicitudes', () => {
     vi.useFakeTimers()
     render(<LoadingOverlay />)
     act(() => window.dispatchEvent(new Event('app:loading-start')))
-    act(() => vi.advanceTimersByTime(999))
+    act(() => vi.advanceTimersByTime(3999))
     expect(screen.queryByText('Cargando datos...')).not.toBeInTheDocument()
     act(() => window.dispatchEvent(new Event('app:loading-start')))
     act(() => vi.advanceTimersByTime(1))

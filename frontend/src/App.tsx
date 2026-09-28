@@ -1,10 +1,11 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useAuth } from './store/auth'
 import Layout from './components/Layout'
 import { ToastHost } from './components/Toast'
 import LoadingOverlay from './components/LoadingOverlay'
 import Login from './pages/Login'
+import { authRedirect } from './authPolicy'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Visor = lazy(() => import('./pages/Visor'))
@@ -17,6 +18,7 @@ const Observaciones = lazy(() => import('./pages/Observaciones'))
 const Lotes = lazy(() => import('./pages/Lotes'))
 const Asignar = lazy(() => import('./pages/Asignar'))
 const Archivados = lazy(() => import('./pages/Archivados'))
+const CambiarPasswordObligatorio = lazy(() => import('./pages/CambiarPasswordObligatorio'))
 
 function RoleGate({ allow, children }: { allow: Array<'usuario' | 'supervisor' | 'administrador'>; children: React.ReactNode }) {
   const user = useAuth((state) => state.user)
@@ -25,6 +27,7 @@ function RoleGate({ allow, children }: { allow: Array<'usuario' | 'supervisor' |
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading, load } = useAuth()
+  const location = useLocation()
   useEffect(() => {
     void load()
     const onUnauth = () => useAuth.getState().logout()
@@ -41,6 +44,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     )
   }
   if (!user) return <Navigate to="/login" replace />
+  const redirect = authRedirect(user, location.pathname)
+  if (redirect) return <Navigate to={redirect} replace />
   return <>{children}</>
 }
 
@@ -49,6 +54,7 @@ function RouteLoader() {
     <Suspense fallback={<div className="p-6 text-slate-500">Cargando módulo…</div>}>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/cambiar-password-obligatorio" element={<AuthGate><CambiarPasswordObligatorio /></AuthGate>} />
         <Route
           path="/"
           element={

@@ -2,12 +2,13 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from .core.config import settings
 from .db.database import SessionLocal, init_db
 from .core import security
+from .core.deps import require_full_access
 from .db.models import Observacion, Setting, User
 from .routers import (
     auth,
@@ -33,9 +34,10 @@ def _seed() -> None:
                 User(
                     username="admin",
                     nombre="Administrador",
-                    password_hash=security.hash_password("Admin123"),
+                    password_hash=security.hash_password("Temporal-2026!"),
                     rol="administrador",
                     estado="activo",
+                    must_change_password=True,
                 )
             )
         for clave, valor in (
@@ -68,17 +70,18 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="ExtractCert", lifespan=lifespan)
 
 app.include_router(auth.router)
-app.include_router(tree.router)
-app.include_router(dashboard.router)
-app.include_router(pdf.router)
-app.include_router(extraccion.router)
-app.include_router(historial.router)
-app.include_router(lotes.router)
-app.include_router(usuarios.router)
-app.include_router(settings_router.router)
-app.include_router(errores.router)
-app.include_router(contactos.router)
-app.include_router(observaciones.router)
+full_access = [Depends(require_full_access)]
+app.include_router(tree.router, dependencies=full_access)
+app.include_router(dashboard.router, dependencies=full_access)
+app.include_router(pdf.router, dependencies=full_access)
+app.include_router(extraccion.router, dependencies=full_access)
+app.include_router(historial.router, dependencies=full_access)
+app.include_router(lotes.router, dependencies=full_access)
+app.include_router(usuarios.router, dependencies=full_access)
+app.include_router(settings_router.router, dependencies=full_access)
+app.include_router(errores.router, dependencies=full_access)
+app.include_router(contactos.router, dependencies=full_access)
+app.include_router(observaciones.router, dependencies=full_access)
 
 # En producción, servir el build de Vite (frontend/dist).
 _DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"

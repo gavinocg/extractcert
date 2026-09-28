@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../store/auth'
 import { useToast } from '../store/toast'
+import { REQUIRED_PASSWORD_PATH } from '../authPolicy'
 
 export default function Login() {
   const { user, login } = useAuth()
@@ -11,14 +12,14 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
 
-  if (user) return <Navigate to="/" replace />
+  if (user) return <Navigate to={user.must_change_password ? REQUIRED_PASSWORD_PATH : '/'} replace />
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setBusy(true)
     try {
       await login(username, password)
-      navigate('/')
+      navigate(useAuth.getState().user?.must_change_password ? REQUIRED_PASSWORD_PATH : '/', { replace: true })
     } catch (err) {
       toast(err instanceof Error ? err.message : 'No se pudo iniciar sesión', 'error')
     } finally {

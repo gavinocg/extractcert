@@ -8,6 +8,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 ).href
 
 const PDFJS_ASSETS = `${import.meta.env.BASE_URL}pdfjs-wasm/`
+const MOBILE_MAX_ZOOM = 400
 
 export interface Sel {
   inicio: number
@@ -367,7 +368,7 @@ const handleDragEnd = useCallback(() => {
       if (points.length >= 2 && pinchRef.current.distance > 0) {
         const currentDistance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y)
         const ratio = currentDistance / pinchRef.current.distance
-        setZoom(Math.min(200, Math.max(25, Math.round(pinchRef.current.zoom * ratio))))
+        setZoom(Math.min(MOBILE_MAX_ZOOM, Math.max(25, Math.round(pinchRef.current.zoom * ratio))))
       } else if (points.length === 1 && el) {
         const p = panRef.current
         el.scrollLeft = p.left - (points[0].x - p.x)
@@ -437,10 +438,10 @@ const handleDragEnd = useCallback(() => {
       if (generation !== loadGenerationRef.current || pdfRef.current !== pdf) return
       if (vertical) void dibujarVertical(pdf)
       else void ver(page)
-    }, 100)
+    }, mobileGestures ? 16 : 100)
     return () => window.clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zoom, rot])
+  }, [zoom, rot, mobileGestures])
 
   useEffect(() => {
     if (vertical) {
@@ -542,7 +543,7 @@ const handleDragEnd = useCallback(() => {
         >
           ›
         </button>
-        {mobileGestures && <><div className="h-4 w-px bg-slate-200" /><button onClick={() => setZoom((value) => Math.max(25, value - 15))} className="rounded border border-slate-300 px-2.5 py-1 text-xs font-bold" aria-label="Alejar">−</button><span className="min-w-10 text-center text-[11px] font-semibold text-slate-500">{zoom}%</span><button onClick={() => setZoom((value) => Math.min(200, value + 15))} className="rounded border border-slate-300 px-2.5 py-1 text-xs font-bold" aria-label="Acercar">+</button></>}
+        {mobileGestures && <><div className="h-4 w-px bg-slate-200" /><button onClick={() => setZoom((value) => Math.max(25, value - 25))} className="rounded border border-slate-300 px-2.5 py-1 text-xs font-bold" aria-label="Alejar">−</button><span className="min-w-12 text-center text-[11px] font-semibold text-slate-500">{zoom}%</span><button onClick={() => setZoom((value) => Math.min(MOBILE_MAX_ZOOM, value + 25))} className="rounded border border-slate-300 px-2.5 py-1 text-xs font-bold" aria-label="Acercar">+</button></>}
       </div>
 
       <div

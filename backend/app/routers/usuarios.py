@@ -1,7 +1,8 @@
 """CRUD de usuarios (solo administrador)."""
 import re
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -11,6 +12,7 @@ from ..core import security
 from ..core.deps import require_admin, require_csrf
 from ..db.database import get_db
 from ..db.models import Extraccion, Lote, LoteAsignacionHistorial, LoteOperador, TramiteError, User
+from ..services.security_audit import record
 
 router = APIRouter(prefix="/api/usuarios", tags=["usuarios"])
 
@@ -22,6 +24,7 @@ class UsuarioIn(BaseModel):
     rol: str = "usuario"
     estado: str = "activo"
     password: str = ""
+    must_change_password: bool | None = None
 
 
 def _rol_valido(rol: str) -> str:
@@ -66,6 +69,9 @@ def listar(
             "rol": u.rol,
             "estado": u.estado,
             "extracciones": cuenta,
+            "must_change_password": u.must_change_password,
+            "password_changed_at": u.password_changed_at,
+            "token_version": u.token_version,
         }
         for u, cuenta in filas
     ]
@@ -74,6 +80,7 @@ def listar(
 @router.post("")
 def crear(
     body: UsuarioIn,
+    request: Request,
     user: User = Depends(require_admin),
     db: Session = Depends(get_db),
     _: None = Depends(require_csrf),
@@ -89,6 +96,10 @@ def crear(
     if email and db.query(User).filter(User.email == email).first():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "El correo ya está registrado.")
 
+    try:
+        security.validate_password(body.password, username)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     u = User(
         username=username,
         nombre=body.nombre.strip(),
@@ -96,6 +107,7 @@ def crear(
         password_hash=security.hash_password(body.password),
         rol=_rol_valido(body.rol),
         estado=_estado_valido(body.estado),
+        must_change_password=True if body.must_change_password is None else body.must_change_password,
     )
     db.add(u)
     try:
@@ -103,6 +115,7 @@ def crear(
     except IntegrityError:
         db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "El usuario o correo ya está registrado.")
+    record(db, "creacion_usuario", u.id, user.id, request.client.host if request.client else None)
     return {"ok": True, "id": u.id}
 
 
@@ -110,6 +123,7 @@ def crear(
 def actualizar(
     user_id: int,
     body: UsuarioIn,
+    request: Request,
     user: User = Depends(require_admin),
     db: Session = Depends(get_db),
     _: None = Depends(require_csrf),
@@ -141,13 +155,28 @@ def actualizar(
     u.email = email
     u.rol = new_role
     u.estado = new_status
+    password_changed = bool(body.password)
+    obligation_changed = body.must_change_password is not None and body.must_change_password != u.must_change_password
     if body.password:
+        try:
+            security.validate_password(body.password, username, u.password_hash)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
         u.password_hash = security.hash_password(body.password)
+        u.password_changed_at = datetime.now()
+    if body.must_change_password is not None:
+        u.must_change_password = body.must_change_password
+    audit_event = None
+    if password_changed or obligation_changed:
+        u.token_version += 1
+        audit_event = "reset_password" if password_changed else "force_password_change"
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "El usuario o correo ya está registrado.")
+    if audit_event:
+        record(db, audit_event, u.id, user.id, request.client.host if request.client else None)
     return {"ok": True}
 
 

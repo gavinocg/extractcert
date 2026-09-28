@@ -47,3 +47,9 @@ def init_db() -> None:
                 conn.execute(text("ALTER TABLE users ADD COLUMN nombre VARCHAR(100) NOT NULL DEFAULT ''"))
             if "estado" not in columnas:
                 conn.execute(text("ALTER TABLE users ADD COLUMN estado VARCHAR(20) NOT NULL DEFAULT 'activo'"))
+            if "must_change_password" not in columnas:
+                conn.execute(text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT 0"))
+            if "password_changed_at" not in columnas:
+                conn.execute(text("ALTER TABLE users ADD COLUMN password_changed_at DATETIME NULL"))
+            if "token_version" not in columnas:
+                conn.execute(text("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 1"))

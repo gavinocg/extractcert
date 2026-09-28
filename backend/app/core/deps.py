@@ -23,18 +23,32 @@ def get_current_user(
 ) -> User:
     if not access_token:
         raise UNAUTH
-    user_id = security.decode_access_token(access_token)
-    if user_id is None:
+    claims = security.decode_access_token(access_token)
+    if claims is None:
         raise FORBIDDEN
-    user = db.get(User, int(user_id))
+    try:
+        user = db.get(User, int(claims["sub"]))
+    except (TypeError, ValueError):
+        raise FORBIDDEN
     if not user:
         raise FORBIDDEN
     if user.estado != "activo":
         raise FORBIDDEN
+    if claims["ver"] != user.token_version:
+        raise FORBIDDEN
     return user
 
 
-def require_admin(user: User = Depends(get_current_user)) -> User:
+def require_full_access(user: User = Depends(get_current_user)) -> User:
+    if user.must_change_password:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Debe cambiar su contraseña antes de continuar.",
+        )
+    return user
+
+
+def require_admin(user: User = Depends(require_full_access)) -> User:
     if user.rol != "administrador":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -43,7 +57,7 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
-def require_supervisor(user: User = Depends(get_current_user)) -> User:
+def require_supervisor(user: User = Depends(require_full_access)) -> User:
     if user.rol not in ("supervisor", "administrador"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -131,8 +131,11 @@ def enviar(body: EnviarIn, user: User = Depends(get_current_user), db: Session =
     errores = db.query(TramiteError).filter(TramiteError.id.in_(body.ids)).all()
     if not errores:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Trámites no encontrados.")
-    for item in errores:
-        require_path_access(db, user, item.original_path)
+    # Supervisor y Administrador gestionan el reporte consolidado de todos los
+    # lotes. Los operadores conservan el aislamiento por membresía.
+    if user.rol == "usuario":
+        for item in errores:
+            require_path_access(db, user, item.original_path)
     destinatarios: list[str] = []
     if body.contactos_ids:
         contactos = db.query(Contacto).filter(Contacto.id.in_(body.contactos_ids)).all()

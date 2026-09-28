@@ -129,7 +129,10 @@ def guardar(
     pedido = os.path.basename(body.nombre.strip()) if body.nombre else os.path.basename(original)
     if not pedido.lower().endswith(".pdf"): pedido += ".pdf"
     if len(pedido) > 255: raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nombre demasiado largo.")
-    version_dir = fs.unir(raiz_repo(db), f"lote-{lote_id}", f"documento-{documento.id}", f"v{version}")
+    version_dir = fs.unir(
+        fs.unir(fs.unir(raiz_repo(db), f"lote-{lote_id}"), f"documento-{documento.id}"),
+        f"v{version}",
+    )
     os.makedirs(version_dir, exist_ok=True)
     destino = fs.unir(version_dir, pedido)
     if os.path.exists(destino):

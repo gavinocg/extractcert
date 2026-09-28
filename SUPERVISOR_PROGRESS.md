@@ -203,6 +203,14 @@ Fecha de inicio: 2026-09-24
 - Resultado local: Supervisión 12.7 ms, Productividad 9.7 ms, Contadores 3.2 ms, árbol paginado 392 ms.
 - Informe detallado en `PERFORMANCE_REPORT.md`.
 
+## Repositorio destino plano
+
+- Las extracciones se guardan directamente en la raiz configurada del repositorio.
+- Colisiones nuevas usan sufijos `C`, `CC`, `CCC` en mayuscula.
+- Las reextracciones reemplazan atomicamente el archivo vigente sin agregar sufijo.
+- Versiones y autoria permanecen auditadas en base de datos, sin subdirectorios fisicos.
+- Produccion verificada sin archivos residuales bajo directorios `lote-*`.
+
 ## Archivados
 
 - Los lotes notificados al 100% salen de Supervision y pasan a Archivados.

@@ -78,13 +78,13 @@ def smtp_settings(db: Session) -> dict:
 
 
 def generar_nombre_sin_colision(dir_: str, archivo: str) -> str:
-    """4426.pdf -> 4426.pdf, 4426c.pdf, 4426cc.pdf ..."""
+    """4426.pdf -> 4426.pdf, 4426C.pdf, 4426CC.pdf ..."""
     base, ext = os.path.splitext(os.path.basename(archivo))
     ext = ext.lower() or ".pdf"
     intento = f"{base}{ext}"
     sufijo = ""
     while os.path.exists(fs.unir(dir_, intento)):
-        sufijo += "c"
+        sufijo += "C"
         intento = f"{base}{sufijo}{ext}"
     return intento
 

@@ -28,6 +28,6 @@ describe('ExtraerModal lease', () => {
 
     view.unmount()
     act(() => { vi.advanceTimersByTime(200) })
-    expect(post).toHaveBeenCalledWith('/api/lotes/documentos/10/release', { lease_token: 'lease-1' })
+    expect(post).toHaveBeenCalledWith('/api/lotes/documentos/10/release', { lease_token: 'lease-1' }, { globalLoading: false })
   })
 })

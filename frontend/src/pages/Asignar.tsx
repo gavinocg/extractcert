@@ -30,12 +30,16 @@ export default function Asignar() {
   const activePath = useRef('')
   const displayedPath = useRef('')
   const requestGeneration = useRef(0)
+  const loadController = useRef<AbortController | null>(null)
 
   const loadTree = useCallback(async (target: string, page = 1) => {
     const generation = ++requestGeneration.current
+    loadController.current?.abort()
+    const controller = new AbortController()
+    loadController.current = controller
     activePath.current = target
     try {
-      const response = await api.get<{ actual: string; items: TreeItem[]; pagina: number; tam: number; total: number }>(`/api/lotes/arbol?path=${encodeURIComponent(target)}&pagina=${page}&tam=${tam}`)
+      const response = await api.get<{ actual: string; items: TreeItem[]; pagina: number; tam: number; total: number }>(`/api/lotes/arbol?path=${encodeURIComponent(target)}&pagina=${page}&tam=${tam}`, { signal: controller.signal })
       if (activePath.current !== target || generation !== requestGeneration.current) return
       displayedPath.current = response.actual
       setPath(response.actual)
@@ -46,15 +50,16 @@ export default function Asignar() {
     } catch (error) {
       if (activePath.current !== target || generation !== requestGeneration.current) return
       activePath.current = displayedPath.current
-      toast(error instanceof Error ? error.message : 'No se pudo abrir la carpeta', 'error')
+      if (!(error instanceof DOMException && error.name === 'AbortError')) toast(error instanceof Error ? error.message : 'No se pudo abrir la carpeta', 'error')
     }
   }, [toast])
 
   useEffect(() => {
     void Promise.all([
       loadTree(''),
-      api.get<Operador[]>('/api/lotes/operadores').then(setOperators),
+      api.get<Operador[]>('/api/lotes/operadores', { cacheTtl: 60_000 }).then(setOperators),
     ]).catch((error) => toast(error instanceof Error ? error.message : 'No se pudieron cargar los operadores', 'error'))
+    return () => { ++requestGeneration.current; loadController.current?.abort() }
   }, [loadTree, toast])
 
   const assign = async (item: TreeItem) => {
@@ -82,7 +87,7 @@ export default function Asignar() {
     const pathToReload = path
     setReleasing(item.relative_path)
     try {
-      await api.post(`/api/lotes/${item.lote.id}/liberar`, {})
+      await api.post(`/api/lotes/${item.lote.id}/liberar`, {}, { globalLoading: false })
       toast('Lote liberado', 'success')
       if (activePath.current === pathToReload) await loadTree(pathToReload, pagina)
       window.dispatchEvent(new Event('lotes:changed'))

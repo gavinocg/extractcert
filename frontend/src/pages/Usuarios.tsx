@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, invalidateApiCache } from '../api/client'
 import { useAuth } from '../store/auth'
 import { useToast } from '../store/toast'
 
@@ -71,6 +71,7 @@ export default function Usuarios() {
         await api.post('/api/usuarios', { username, nombre, email, rol, estado, password })
         toast('Usuario creado', 'success')
       }
+      invalidateApiCache('/api/lotes/operadores')
       reset()
       await cargar()
       if (editId === user?.id) await reloadAuth()
@@ -83,6 +84,7 @@ export default function Usuarios() {
     if (!confirm(`¿Eliminar al usuario ${u.username}?`)) return
     try {
       await api.del(`/api/usuarios/${u.id}`)
+      invalidateApiCache('/api/lotes/operadores')
       toast('Usuario eliminado', 'success')
       await cargar()
     } catch (err) {

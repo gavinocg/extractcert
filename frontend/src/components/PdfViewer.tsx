@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import * as pdfjs from 'pdfjs-dist'
-import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -45,6 +45,9 @@ const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const pdfRef = useRef<PDFDocumentProxy | null>(null)
+  const loadingTaskRef = useRef<PDFDocumentLoadingTask | null>(null)
+  const fetchControllerRef = useRef<AbortController | null>(null)
+  const loadGenerationRef = useRef(0)
   const canvasMapRef = useRef<Map<number, HTMLCanvasElement>>(new Map())
   const [page, setPage] = useState(1)
   const [numPages, setNumPages] = useState(0)
@@ -61,7 +64,8 @@ const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
   const [paniendo, setPaniendo] = useState(false)
   const panRef = useRef({ activo: false, x: 0, y: 0, left: 0, top: 0 })
   const [mobileGestures, setMobileGestures] = useState(false)
-  const touchRef = useRef({ distance: 0, zoom: 75, x: 0, y: 0, left: 0, top: 0 })
+  const touchPointsRef = useRef(new Map<number, { x: number; y: number }>())
+  const pinchRef = useRef({ distance: 0, zoom: 75 })
 
   useEffect(() => {
     if (numPages > 0 && pageOrder.length !== numPages) {
@@ -178,7 +182,7 @@ const handleDragEnd = useCallback(() => {
       try {
         await task.promise
       } catch (e) {
-        if (ctx) {
+        if (ctx && renderTaskRef.current.get(canvas) === task) {
           ctx.fillStyle = '#fff'
           ctx.fillRect(0, 0, canvas.width, canvas.height)
         }
@@ -243,39 +247,38 @@ const handleDragEnd = useCallback(() => {
 
   const cargar = useCallback(
     async (u: string) => {
+      const generation = ++loadGenerationRef.current
+      fetchControllerRef.current?.abort()
+      fetchControllerRef.current = new AbortController()
+      for (const task of renderTaskRef.current.values()) task.cancel()
+      renderTaskRef.current.clear()
+      await loadingTaskRef.current?.destroy().catch(() => undefined)
+      loadingTaskRef.current = null
       setCargando(true)
       rotRef.current = 0
       setRot(0)
       try {
-        if (pdfRef.current) {
-          try {
-            const lt = (pdfRef.current as unknown as { loadingTask?: { destroy(): Promise<void> } }).loadingTask
-            await lt?.destroy()
-          } catch {
-            /* ignore */
-          }
-          pdfRef.current = null
-        }
-        const resp = await fetch(u, { credentials: 'include' })
+        pdfRef.current = null
+        const resp = await fetch(u, { credentials: 'include', signal: fetchControllerRef.current.signal })
         if (!resp.ok) {
           const msg = resp.status === 401 ? 'No autenticado para leer el PDF' : `HTTP ${resp.status}`
           throw new Error(msg)
         }
         const data = await resp.arrayBuffer()
-        const doc = await pdfjs.getDocument({ data, wasmUrl: PDFJS_ASSETS }).promise
+        if (generation !== loadGenerationRef.current) return
+        const loadingTask = pdfjs.getDocument({ data, wasmUrl: PDFJS_ASSETS })
+        loadingTaskRef.current = loadingTask
+        const doc = await loadingTask.promise
+        if (generation !== loadGenerationRef.current) { await loadingTask.destroy(); return }
         pdfRef.current = doc
         setNumPages(doc.numPages)
         setInicio(ini ?? 0)
         setFinS(fin ?? 0)
         setPage(1)
-        if (!vertical) {
-          await new Promise<void>((r) => requestAnimationFrame(() => r()))
-          await ver(1)
-        }
       } catch (e) {
-        onError?.(e instanceof Error ? e.message : 'No se pudo cargar el PDF')
+        if (generation === loadGenerationRef.current && !(e instanceof DOMException && e.name === 'AbortError')) onError?.(e instanceof Error ? e.message : 'No se pudo cargar el PDF')
       } finally {
-        setCargando(false)
+        if (generation === loadGenerationRef.current) setCargando(false)
       }
     },
     [ini, fin, ver, vertical, onError],
@@ -320,55 +323,12 @@ const handleDragEnd = useCallback(() => {
 
   useEffect(() => {
     if (!zoomCtrl) { setMobileGestures(false); return }
-    const media = window.matchMedia('(pointer: coarse) and (max-width: 1024px)')
-    const update = () => setMobileGestures(media.matches)
+    const media = window.matchMedia('(max-width: 1024px)')
+    const update = () => setMobileGestures(media.matches && (navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches))
     update()
     media.addEventListener('change', update)
     return () => media.removeEventListener('change', update)
   }, [zoomCtrl])
-
-  useEffect(() => {
-    const el = wrapRef.current
-    if (!el || !mobileGestures) return
-    const distance = (touches: TouchList) => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY)
-    const onStart = (event: TouchEvent) => {
-      if (event.touches.length === 2) {
-        touchRef.current.distance = distance(event.touches)
-        touchRef.current.zoom = zoomRef.current
-      } else if (event.touches.length === 1) {
-        touchRef.current.x = event.touches[0].clientX
-        touchRef.current.y = event.touches[0].clientY
-        touchRef.current.left = el.scrollLeft
-        touchRef.current.top = el.scrollTop
-        setPaniendo(true)
-      }
-    }
-    const onMove = (event: TouchEvent) => {
-      if (event.touches.length === 2 && touchRef.current.distance > 0) {
-        event.preventDefault()
-        const ratio = distance(event.touches) / touchRef.current.distance
-        setZoom(Math.min(200, Math.max(25, Math.round(touchRef.current.zoom * ratio))))
-      } else if (event.touches.length === 1) {
-        event.preventDefault()
-        el.scrollLeft = touchRef.current.left - (event.touches[0].clientX - touchRef.current.x)
-        el.scrollTop = touchRef.current.top - (event.touches[0].clientY - touchRef.current.y)
-      }
-    }
-    const onEnd = () => {
-      touchRef.current.distance = 0
-      setPaniendo(false)
-    }
-    el.addEventListener('touchstart', onStart, { passive: true })
-    el.addEventListener('touchmove', onMove, { passive: false })
-    el.addEventListener('touchend', onEnd)
-    el.addEventListener('touchcancel', onEnd)
-    return () => {
-      el.removeEventListener('touchstart', onStart)
-      el.removeEventListener('touchmove', onMove)
-      el.removeEventListener('touchend', onEnd)
-      el.removeEventListener('touchcancel', onEnd)
-    }
-  }, [mobileGestures])
 
   const finPan = useCallback(() => {
     panRef.current.activo = false
@@ -377,62 +337,138 @@ const handleDragEnd = useCallback(() => {
 
   const inicioPan = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      if (!gestoRueda || e.pointerType !== 'mouse' || e.button !== 0) return
       const el = wrapRef.current
       if (!el) return
+      if (mobileGestures && e.pointerType === 'touch') {
+        e.currentTarget.setPointerCapture(e.pointerId)
+        touchPointsRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+        const points = [...touchPointsRef.current.values()]
+        if (points.length === 2) {
+          pinchRef.current = { distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y), zoom: zoomRef.current }
+        } else if (points.length === 1) {
+          panRef.current = { activo: true, x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop }
+          setPaniendo(true)
+        }
+        return
+      }
+      if (!gestoRueda || e.pointerType !== 'mouse' || e.button !== 0) return
       panRef.current = { activo: true, x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop }
       setPaniendo(true)
       el.setPointerCapture(e.pointerId)
     },
-    [gestoRueda],
+    [gestoRueda, mobileGestures],
   )
 
   const moverPan = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    const p = panRef.current
     const el = wrapRef.current
+    if (mobileGestures && e.pointerType === 'touch' && touchPointsRef.current.has(e.pointerId)) {
+      touchPointsRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      const points = [...touchPointsRef.current.values()]
+      if (points.length >= 2 && pinchRef.current.distance > 0) {
+        const currentDistance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y)
+        const ratio = currentDistance / pinchRef.current.distance
+        setZoom(Math.min(200, Math.max(25, Math.round(pinchRef.current.zoom * ratio))))
+      } else if (points.length === 1 && el) {
+        const p = panRef.current
+        el.scrollLeft = p.left - (points[0].x - p.x)
+        el.scrollTop = p.top - (points[0].y - p.y)
+      }
+      return
+    }
+    const p = panRef.current
     if (!p.activo || !el) return
     el.scrollLeft = p.left - (e.clientX - p.x)
     el.scrollTop = p.top - (e.clientY - p.y)
-  }, [])
+  }, [mobileGestures])
+
+  const finPuntero = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'touch') {
+      touchPointsRef.current.delete(e.pointerId)
+      const el = wrapRef.current
+      const remaining = [...touchPointsRef.current.values()]
+      pinchRef.current.distance = 0
+      if (remaining.length === 1 && el) {
+        panRef.current = { activo: true, x: remaining[0].x, y: remaining[0].y, left: el.scrollLeft, top: el.scrollTop }
+      } else if (!remaining.length) {
+        finPan()
+      }
+      return
+    }
+    finPan()
+  }, [finPan])
 
   useEffect(() => {
     canvasMapRef.current.clear()
     if (url) void cargar(url)
+    return () => {
+      ++loadGenerationRef.current
+      fetchControllerRef.current?.abort()
+      void loadingTaskRef.current?.destroy().catch(() => undefined)
+      loadingTaskRef.current = null
+      for (const task of renderTaskRef.current.values()) task.cancel()
+      renderTaskRef.current.clear()
+      pdfRef.current = null
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url])
 
   useEffect(() => {
     if (cargando || !pdfRef.current || numPages === 0) return
+    const pdf = pdfRef.current
+    const generation = loadGenerationRef.current
     if (vertical) {
-      const id = requestAnimationFrame(() => void dibujarVertical(pdfRef.current!))
+      const id = requestAnimationFrame(() => {
+        if (generation === loadGenerationRef.current && pdfRef.current === pdf) void dibujarVertical(pdf)
+      })
       return () => cancelAnimationFrame(id)
     }
-    const id = requestAnimationFrame(() => void ver(page))
+    const id = requestAnimationFrame(() => {
+      if (generation === loadGenerationRef.current && pdfRef.current === pdf) void ver(page)
+    })
     return () => cancelAnimationFrame(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cargando, numPages, vertical])
 
   useEffect(() => {
     if (!pdfRef.current || numPages === 0 || cargando) return
-    if (vertical) void dibujarVertical(pdfRef.current)
-    else void ver(page)
+    const pdf = pdfRef.current
+    const generation = loadGenerationRef.current
+    const timer = window.setTimeout(() => {
+      if (generation !== loadGenerationRef.current || pdfRef.current !== pdf) return
+      if (vertical) void dibujarVertical(pdf)
+      else void ver(page)
+    }, 100)
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom, rot])
 
   useEffect(() => {
     if (vertical) {
+      let timer: number | undefined
       const onResize = () => {
+        window.clearTimeout(timer)
         const pdf = pdfRef.current
-        if (pdf) void dibujarVertical(pdf)
+        const generation = loadGenerationRef.current
+        if (!pdf) return
+        timer = window.setTimeout(() => {
+          if (generation === loadGenerationRef.current && pdfRef.current === pdf) void dibujarVertical(pdf)
+        }, 120)
       }
       window.addEventListener('resize', onResize)
-      return () => window.removeEventListener('resize', onResize)
+      return () => { window.removeEventListener('resize', onResize); window.clearTimeout(timer) }
     }
+    let timer: number | undefined
     const onResize = () => {
+      window.clearTimeout(timer)
       const pdf = pdfRef.current
-      if (pdf) void ver(page)
+      const generation = loadGenerationRef.current
+      if (!pdf) return
+      timer = window.setTimeout(() => {
+        if (generation === loadGenerationRef.current && pdfRef.current === pdf) void ver(page)
+      }, 120)
     }
     window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+    return () => { window.removeEventListener('resize', onResize); window.clearTimeout(timer) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, ver, vertical, dibujarVertical])
 
@@ -514,8 +550,8 @@ const handleDragEnd = useCallback(() => {
         onWheel={gestoRueda ? undefined : handleWheel}
         onPointerDown={inicioPan}
         onPointerMove={moverPan}
-        onPointerUp={finPan}
-        onPointerCancel={finPan}
+        onPointerUp={finPuntero}
+        onPointerCancel={finPuntero}
         className={`relative flex-1 overflow-auto p-2 ${gestoRueda ? (paniendo ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
         style={{ minHeight: 360, touchAction: mobileGestures ? 'none' : 'auto' }}
       >

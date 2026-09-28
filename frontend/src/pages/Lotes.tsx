@@ -40,6 +40,7 @@ export default function Lotes({ supervisionView = false }: { supervisionView?: b
   const [operatorSearch, setOperatorSearch] = useState('')
   const [savingReassignment, setSavingReassignment] = useState(false)
   const requestGeneration = useRef(0)
+  const loadController = useRef<AbortController | null>(null)
   const currentScope = useRef(supervisionView)
   currentScope.current = supervisionView
 
@@ -47,26 +48,29 @@ export default function Lotes({ supervisionView = false }: { supervisionView?: b
     const scope = supervisionView
     if (currentScope.current !== scope) return
     const generation = ++requestGeneration.current
+    loadController.current?.abort()
+    const controller = new AbortController()
+    loadController.current = controller
     setLoading(true)
     try {
       if (scope) {
         const [lots, stats, availableOperators] = await Promise.all([
-          api.get<Lote[]>('/api/lotes?scope=supervision'),
-          api.get<OperatorStats[]>('/api/lotes/operator-stats'),
-          api.get<Operador[]>('/api/lotes/operadores'),
+          api.get<Lote[]>('/api/lotes?scope=supervision', { signal: controller.signal }),
+          api.get<OperatorStats[]>('/api/lotes/operator-stats', { signal: controller.signal }),
+          api.get<Operador[]>('/api/lotes/operadores', { signal: controller.signal, cacheTtl: 60_000 }),
         ])
         if (generation !== requestGeneration.current || currentScope.current !== scope) return
         setItems(lots)
         setOperatorStats(stats)
         setOperators(availableOperators)
       } else {
-        const lots = await api.get<Lote[]>('/api/lotes?scope=mine')
+        const lots = await api.get<Lote[]>('/api/lotes?scope=mine', { signal: controller.signal })
         if (generation !== requestGeneration.current || currentScope.current !== scope) return
         setItems(lots)
       }
     } catch (error) {
       if (generation !== requestGeneration.current || currentScope.current !== scope) return
-      toast(error instanceof Error ? error.message : 'No se pudieron cargar los lotes', 'error')
+      if (!(error instanceof DOMException && error.name === 'AbortError')) toast(error instanceof Error ? error.message : 'No se pudieron cargar los lotes', 'error')
     } finally {
       if (generation === requestGeneration.current && currentScope.current === scope) setLoading(false)
     }
@@ -84,7 +88,7 @@ export default function Lotes({ supervisionView = false }: { supervisionView?: b
     setNotifying(0)
     setReleasing(0)
     void load()
-    return () => { ++requestGeneration.current }
+    return () => { ++requestGeneration.current; loadController.current?.abort() }
   }, [load])
 
   const notify = async (lote: Lote) => {
@@ -107,7 +111,7 @@ export default function Lotes({ supervisionView = false }: { supervisionView?: b
     if (!confirm(`¿Liberar el lote ${lote.nombre}? El avance se conservará, pero quedará sin operador responsable.`)) return
     setReleasing(lote.id)
     try {
-      await api.post(`/api/lotes/${lote.id}/liberar`, {})
+      await api.post(`/api/lotes/${lote.id}/liberar`, {}, { globalLoading: false })
       toast('Lote liberado', 'success')
       await load()
       window.dispatchEvent(new Event('lotes:changed'))

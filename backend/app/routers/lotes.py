@@ -5,7 +5,8 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy import case, func
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from ..core.deps import get_current_user, require_csrf, require_supervisor
 from ..core.config import settings
@@ -77,22 +78,29 @@ def arbol(
     total = len(all_dirs)
     start = (pagina - 1) * tam
     page_dirs = all_dirs[start:start + tam]
+    relative_dirs = [lote_service.relative_path(base, fs.unir(current, name)) for name in page_dirs]
+    page_lotes = db.query(Lote).options(
+        joinedload(Lote.operador), joinedload(Lote.asignado_por),
+        selectinload(Lote.miembros).joinedload(LoteOperador.operador),
+    ).filter(Lote.relative_path.in_(relative_dirs)).all() if relative_dirs else []
+    lotes_by_path = {item.relative_path: item for item in page_lotes}
     result = []
     for name in page_dirs:
         directory = fs.unir(current, name)
         relative = lote_service.relative_path(base, directory)
         child_dirs = fs.listar_dirs(directory)
         pdfs = fs.listar_pdfs(directory)
-        lote = db.query(Lote).filter(Lote.relative_path == relative).first()
+        lote = lotes_by_path.get(relative)
         is_final = bool(pdfs) and not child_dirs
+        serialized = lote_service.serialize(db, lote, reconcile=True) if lote else None
         result.append({
             "nombre": name,
             "relative_path": relative,
             "es_lote": is_final,
             "tiene_hijos": bool(child_dirs),
             "total": len(pdfs),
-            "lote": lote_service.serialize(db, lote) if lote else None,
-            "metricas": lote_service.metricas_directorio(db, relative, name) if is_final else None,
+            "lote": serialized,
+            "metricas": serialized["metricas"] if is_final and serialized else (lote_service.metricas_directorio(db, relative, name) if is_final else None),
         })
     db.commit()
     return {
@@ -110,7 +118,7 @@ def listar(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    q = db.query(Lote)
+    q = db.query(Lote).options(joinedload(Lote.operador), joinedload(Lote.asignado_por), selectinload(Lote.miembros).joinedload(LoteOperador.operador))
     if user.rol == "usuario" or scope == "mine":
         q = q.join(LoteOperador).filter(LoteOperador.operador_id == user.id, LoteOperador.activo.is_(True))
     elif scope in ("supervision", "archived") and user.rol in ("supervisor", "administrador"):
@@ -118,6 +126,9 @@ def listar(
     else:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bandeja no válida.")
     rows = q.order_by(Lote.assigned_at.desc(), Lote.nombre).all()
+    for lote in rows:
+        if lote.estado == "notificado":
+            lote_service.sync_estado(db, lote)
     result = [lote_service.serialize(db, lote) for lote in rows]
     if scope == "mine":
         result = [item for item in result if item["estado"] != "notificado"]
@@ -134,17 +145,19 @@ def counts(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    mine = db.query(Lote).join(LoteOperador).filter(LoteOperador.operador_id == user.id, LoteOperador.activo.is_(True)).all()
-    pending = 0
-    for lote in mine:
-        lote_service.sync_estado(db, lote)
-        if lote.estado != "notificado":
-            pending += 1
+    pending = db.query(func.count(func.distinct(Lote.id))).join(LoteOperador).filter(
+        LoteOperador.operador_id == user.id, LoteOperador.activo.is_(True), Lote.estado != "notificado"
+    ).scalar() or 0
     supervision = 0
     if user.rol in ("supervisor", "administrador"):
-        assigned = db.query(Lote).filter(Lote.operador_id.is_not(None)).all()
-        supervision = sum(1 for lote in assigned if lote_service.metricas(db, lote)["porcentaje"] < 100)
-    db.commit()
+        progress = db.query(
+            Lote.id,
+            func.count(LoteDocumento.id).label("total"),
+            func.sum(case((LoteDocumento.estado.in_(("completado", "error")), 1), else_=0)).label("done"),
+        ).outerjoin(LoteDocumento, (LoteDocumento.lote_id == Lote.id) & LoteDocumento.presente.is_(True)).filter(
+            Lote.operador_id.is_not(None)
+        ).group_by(Lote.id).all()
+        supervision = sum(1 for _, total, done in progress if not total or done < total)
     return {"pending": pending, "supervision": supervision}
 
 
@@ -158,28 +171,46 @@ def operator_stats(
         User.rol.in_(("usuario", "supervisor")),
         User.estado == "activo",
     ).order_by(User.nombre, User.username).all()
+    shared_rows = db.query(
+        LoteOperador.operador_id, Lote.id,
+        func.count(LoteDocumento.id),
+        func.sum(case((LoteDocumento.estado.in_(("completado", "error")), 1), else_=0)),
+    ).join(Lote, Lote.id == LoteOperador.lote_id).outerjoin(
+        LoteDocumento, (LoteDocumento.lote_id == Lote.id) & LoteDocumento.presente.is_(True)
+    ).filter(LoteOperador.activo.is_(True)).group_by(LoteOperador.operador_id, Lote.id).all()
+    shared: dict[int, list[tuple[int, int]]] = {}
+    for operator_id, _, total, done in shared_rows:
+        shared.setdefault(operator_id, []).append((int(total or 0), int(done or 0)))
+    productivity = {row[0]: (int(row[1] or 0), int(row[2] or 0)) for row in db.query(
+        LoteDocumento.completed_by,
+        func.sum(case((LoteDocumento.estado == "completado", 1), else_=0)),
+        func.sum(case((LoteDocumento.estado == "error", 1), else_=0)),
+    ).filter(LoteDocumento.completed_by.is_not(None), LoteDocumento.presente.is_(True)).group_by(LoteDocumento.completed_by).all()}
+    versions = {row[0]: (int(row[1]), int(row[2] or 0)) for row in db.query(
+        ExtraccionVersion.autor_id, func.count(ExtraccionVersion.id),
+        func.sum(case((ExtraccionVersion.created_at >= since, 1), else_=0)),
+    ).group_by(ExtraccionVersion.autor_id).all()}
     result = []
     for operator in operators:
-        operator_lots = db.query(Lote).join(LoteOperador).filter(LoteOperador.operador_id == operator.id, LoteOperador.activo.is_(True)).all()
-        shared_stats = [lote_service.metricas(db, lote) for lote in operator_lots]
-        realizados = db.query(LoteDocumento).filter(LoteDocumento.completed_by == operator.id, LoteDocumento.estado == "completado", LoteDocumento.presente.is_(True)).count()
-        errores = db.query(LoteDocumento).filter(LoteDocumento.completed_by == operator.id, LoteDocumento.estado == "error", LoteDocumento.presente.is_(True)).count()
-        totals = {"total": sum(item["total"] for item in shared_stats), "realizados": realizados, "errores": errores, "pendientes": sum(item["pendientes"] for item in shared_stats)}
-        completed_lots = sum(1 for item in shared_stats if item["total"] and item["pendientes"] == 0)
-        recent = db.query(ExtraccionVersion).filter(ExtraccionVersion.autor_id == operator.id, ExtraccionVersion.created_at >= since).all()
-        version_count = db.query(ExtraccionVersion).filter(ExtraccionVersion.autor_id == operator.id).count()
+        lots = shared.get(operator.id, [])
+        total = sum(item[0] for item in lots)
+        pendientes = sum(max(0, item[0] - item[1]) for item in lots)
+        realizados, errores = productivity.get(operator.id, (0, 0))
+        version_count, recent_count = versions.get(operator.id, (0, 0))
+        totals = {"total": total, "realizados": realizados, "errores": errores, "pendientes": pendientes}
+        completed_lots = sum(1 for item_total, done in lots if item_total and item_total == done)
         progress = round((totals["total"] - totals["pendientes"]) * 100 / totals["total"]) if totals["total"] else 0
         result.append({
             "id": operator.id,
             "username": operator.username,
             "nombre": operator.nombre,
-            "lotes_asignados": len(operator_lots),
+            "lotes_asignados": len(lots),
             "lotes_completados": completed_lots,
             **totals,
             "porcentaje": progress,
-            "realizados_30_dias": len(recent),
+            "realizados_30_dias": recent_count,
             "versiones": version_count,
-            "promedio_diario_30_dias": round(len(recent) / 30, 1),
+            "promedio_diario_30_dias": round(recent_count / 30, 1),
         })
     return result
 

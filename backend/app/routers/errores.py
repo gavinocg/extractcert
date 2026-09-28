@@ -47,7 +47,7 @@ def crear(body: ErrorIn, user: User = Depends(get_current_user), db: Session = D
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Observación requerida.")
     real, lote_id = _validar_ruta(body.ruta, db, user)
     db.query(AssignmentLock).filter(AssignmentLock.clave == "global").with_for_update().one()
-    db.query(Lote).filter(Lote.id == lote_id).with_for_update().one()
+    lote = db.query(Lote).filter(Lote.id == lote_id).with_for_update().one()
     documento = db.query(LoteDocumento).filter(LoteDocumento.id == body.documento_id).with_for_update().first()
     if not documento or documento.lote_id != lote_id:
         raise HTTPException(status.HTTP_409_CONFLICT, "El documento no pertenece al lote.")
@@ -64,6 +64,8 @@ def crear(body: ErrorIn, user: User = Depends(get_current_user), db: Session = D
         documento.estado, documento.completed_by = "error", user.id
         documento.completed_at = __import__("datetime").datetime.now()
         lote_service.clear_lease(documento)
+        db.flush()
+        lote_service.sync_estado(db, lote, lote_service.metricas_db(db, lote))
         db.commit()
         return {"ok": True, "id": existente.id}
     e = TramiteError(original_path=canon, archivo=os.path.basename(canon), observacion=body.observacion.strip(), user_id=user.id, lote_id=lote_id, documento_id=documento.id)
@@ -71,6 +73,8 @@ def crear(body: ErrorIn, user: User = Depends(get_current_user), db: Session = D
     documento.estado, documento.completed_by = "error", user.id
     documento.completed_at = __import__("datetime").datetime.now()
     lote_service.clear_lease(documento)
+    db.flush()
+    lote_service.sync_estado(db, lote, lote_service.metricas_db(db, lote))
     db.commit()
     return {"ok": True, "id": e.id}
 
@@ -100,7 +104,7 @@ def eliminar(eid: int, lease_token: str = Query(...), user: User = Depends(get_c
     if not initial:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No existe.")
     db.query(AssignmentLock).filter(AssignmentLock.clave == "global").with_for_update().one()
-    db.query(Lote).filter(Lote.id == initial.lote_id).with_for_update().one()
+    lote = db.query(Lote).filter(Lote.id == initial.lote_id).with_for_update().one()
     e = db.query(TramiteError).filter(TramiteError.id == eid).with_for_update().first()
     if not e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No existe.")
@@ -114,6 +118,8 @@ def eliminar(eid: int, lease_token: str = Query(...), user: User = Depends(get_c
     db.delete(e)
     documento.estado, documento.completed_by, documento.completed_at = "pendiente", None, None
     lote_service.clear_lease(documento)
+    db.flush()
+    lote_service.sync_estado(db, lote, lote_service.metricas_db(db, lote))
     db.commit()
     return {"ok": True}
 

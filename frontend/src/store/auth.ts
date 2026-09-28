@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { api } from '../api/client'
+import { api, clearApiCache } from '../api/client'
 
 export interface User {
   id: number
@@ -31,7 +31,9 @@ export const useAuth = create<AuthState>((set) => ({
   },
 
   login: async (username, password) => {
+    clearApiCache()
     const r = await api.post<{ user: User }>('/api/auth/login', { username, password })
+    clearApiCache()
     set({ user: r.user })
   },
 
@@ -39,6 +41,7 @@ export const useAuth = create<AuthState>((set) => ({
     try {
       await api.post<{ ok: boolean }>('/api/auth/logout', {})
     } finally {
+      clearApiCache()
       set({ user: null })
     }
   },

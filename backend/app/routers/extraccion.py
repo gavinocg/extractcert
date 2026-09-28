@@ -105,7 +105,7 @@ def guardar(
         return _version_response(previous_version)
     original, _ = _validar_origen(body.ruta, body.documento_id, db, user)
     db.query(AssignmentLock).filter(AssignmentLock.clave == "global").with_for_update().one()
-    db.query(Lote).filter(Lote.id == documento.lote_id).with_for_update().one()
+    lote = db.query(Lote).filter(Lote.id == documento.lote_id).with_for_update().one()
     documento = db.query(LoteDocumento).filter(LoteDocumento.id == body.documento_id).with_for_update().one()
     lote_service.require_member(db, documento.lote_id, user.id)
     previous_version = db.query(ExtraccionVersion).filter(ExtraccionVersion.idempotency_key == body.idempotency_key).first()
@@ -187,6 +187,8 @@ def guardar(
         saved_version = ExtraccionVersion(extraccion_id=nuevo_id, documento_id=documento.id, version=version, autor_id=user.id, pagina_inicio=body.inicio, pagina_fin=body.fin, destino_path=destino, tipo=estado, idempotency_key=body.idempotency_key)
         db.add(saved_version)
         lote_service.require_member(db, lote_id, user.id)
+        db.flush()
+        lote_service.sync_estado(db, lote, lote_service.metricas_db(db, lote))
         db.commit()
         committed = True
     except IntegrityError:

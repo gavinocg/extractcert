@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api/client'
 import EnviarErroresModal from '../components/EnviarErroresModal'
 import { useToast } from '../store/toast'
@@ -12,12 +12,26 @@ export default function Errores() {
   const [sel, setSel] = useState<number[]>([])
   const [showEnviar, setShowEnviar] = useState(false)
   const toast = useToast((s) => s.show)
+  const requestGeneration = useRef(0)
+  const loadController = useRef<AbortController | null>(null)
 
-  const cargar = async (pg = 1) => {
-    const r = await api.get<{ registros: Registro[]; total: number; pagina: number; tam: number }>('/api/errores?pagina=' + pg)
-    setRegs(r.registros); setTotal(r.total); setPagina(r.pagina); setSel([])
-  }
-  useEffect(() => { void cargar(1) }, [])
+  const cargar = useCallback(async (pg = 1) => {
+    const generation = ++requestGeneration.current
+    loadController.current?.abort()
+    const controller = new AbortController()
+    loadController.current = controller
+    try {
+      const r = await api.get<{ registros: Registro[]; total: number; pagina: number; tam: number }>('/api/errores?pagina=' + pg, { signal: controller.signal })
+      if (generation !== requestGeneration.current) return
+      setRegs(r.registros); setTotal(r.total); setPagina(r.pagina); setSel([])
+    } catch (error) {
+      if (generation === requestGeneration.current && !(error instanceof DOMException && error.name === 'AbortError')) toast(error instanceof Error ? error.message : 'No se pudieron cargar los errores', 'error')
+    }
+  }, [toast])
+  useEffect(() => {
+    void cargar(1)
+    return () => { ++requestGeneration.current; loadController.current?.abort() }
+  }, [cargar])
 
   const toggle = (id: number) => setSel((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
   const corregir = async (registro: Registro) => {

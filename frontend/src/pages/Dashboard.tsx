@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../api/client'
 import ErrorModal from '../components/ErrorModal'
 import EnviarErroresModal from '../components/EnviarErroresModal'
-import ExtraerModal from '../components/ExtraerModal'
 import { useToast } from '../store/toast'
 import { useAuth } from '../store/auth'
 
@@ -37,6 +36,9 @@ interface Item {
 }
 
 interface Claim { documento_id: number; lease_token: string; lease_expires_at: string }
+
+const loadExtraerModal = () => import('../components/ExtraerModal')
+const ExtraerModal = lazy(loadExtraerModal)
 
 function formatoFecha(iso: string | null): string {
   if (!iso) return '—'
@@ -75,16 +77,20 @@ export default function Dashboard() {
   const [claiming, setClaiming] = useState(0)
   const toast = useToast((s) => s.show)
   const requestId = useRef(0)
+  const loadController = useRef<AbortController | null>(null)
 
   const [dirsStats, setDirsStats] = useState<{ nombre: string; total: number; realizados: number; errores: number; pendientes: number; pctRealizado: number; pctError: number; pctPendiente: number; pctAvance: number }[]>([])
 
   const cargar = useCallback(async (ruta: string | null, pg?: number) => {
     const currentRequest = ++requestId.current
+    loadController.current?.abort()
+    const controller = new AbortController()
+    loadController.current = controller
     setCargando(true)
     setErr('')
     try {
       const t = await api.get<{ base: string; actual: string; dirs: string[]; dirs_stats: { nombre: string; total: number; realizados: number; errores: number; pendientes: number; pctRealizado: number; pctError: number; pctPendiente: number; pctAvance: number }[]; pdfs: string[] }>(
-        '/api/tree' + (ruta ? `?path=${encodeURIComponent(ruta)}` : ''),
+        '/api/tree' + (ruta ? `?path=${encodeURIComponent(ruta)}` : ''), { signal: controller.signal },
       )
       if (currentRequest !== requestId.current) return
       setPath(t.actual)
@@ -93,13 +99,13 @@ export default function Dashboard() {
       const q = new URLSearchParams()
       if (t.actual) q.set('path', t.actual)
       if (pg !== undefined) q.set('pagina', String(pg))
-      const d = await api.get<Dash>('/api/dashboard?' + q.toString())
+      const d = await api.get<Dash>('/api/dashboard?' + q.toString(), { signal: controller.signal })
       if (currentRequest !== requestId.current) return
       if (pg === undefined && d.pagina_sugerida !== d.pagina && d.total > d.tam) {
         const q2 = new URLSearchParams()
         q2.set('path', t.actual)
         q2.set('pagina', String(d.pagina_sugerida))
-        const d2 = await api.get<Dash>('/api/dashboard?' + q2.toString())
+        const d2 = await api.get<Dash>('/api/dashboard?' + q2.toString(), { signal: controller.signal })
         if (currentRequest !== requestId.current) return
         setDash(d2)
       } else {
@@ -108,7 +114,7 @@ export default function Dashboard() {
       setSelected([])
     } catch (e) {
       if (currentRequest !== requestId.current) return
-      setErr(e instanceof Error ? e.message : 'Error')
+      if (!(e instanceof DOMException && e.name === 'AbortError')) setErr(e instanceof Error ? e.message : 'Error')
     } finally {
       if (currentRequest === requestId.current) setCargando(false)
     }
@@ -119,6 +125,7 @@ export default function Dashboard() {
     const pg = parseInt(searchParams.get('pagina') ?? '', 10)
     if (qp) void cargar(qp, Number.isNaN(pg) ? undefined : pg)
     else void cargar(null)
+    return () => { ++requestId.current; loadController.current?.abort() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -147,7 +154,7 @@ export default function Dashboard() {
   }
 
   const closeError = () => {
-    if (errorTarget?.item.documento_id) void api.post(`/api/lotes/documentos/${errorTarget.item.documento_id}/release`, { lease_token: errorTarget.leaseToken }).catch(() => undefined)
+    if (errorTarget?.item.documento_id) void api.post(`/api/lotes/documentos/${errorTarget.item.documento_id}/release`, { lease_token: errorTarget.leaseToken }, { globalLoading: false }).catch(() => undefined)
     setErrorTarget(null)
     void cargar(path, dash?.pagina)
   }
@@ -155,7 +162,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!errorTarget?.item.documento_id) return
     const heartbeat = window.setInterval(() => {
-      void api.post(`/api/lotes/documentos/${errorTarget.item.documento_id}/heartbeat`, { lease_token: errorTarget.leaseToken }).catch((error) => {
+      void api.post(`/api/lotes/documentos/${errorTarget.item.documento_id}/heartbeat`, { lease_token: errorTarget.leaseToken }, { globalLoading: false }).catch((error) => {
         toast(error instanceof Error ? error.message : 'Se perdió la reserva del documento', 'error')
         setErrorTarget(null)
         void cargar(path, dash?.pagina)
@@ -182,20 +189,27 @@ export default function Dashboard() {
   const claimAndOpen = async (it: Item, mode: 'error' | 'extract') => {
     if (!it.documento_id) { toast('Documento no disponible en el inventario', 'error'); return }
     setClaiming(it.documento_id)
+    let claim: Claim | null = null
+    let opened = false
     try {
-      const claim = await api.post<Claim>(`/api/lotes/documentos/${it.documento_id}/claim`, {})
+      if (mode === 'extract') await loadExtraerModal()
+      claim = await api.post<Claim>(`/api/lotes/documentos/${it.documento_id}/claim`, {})
       if (mode === 'error') setErrorTarget({ item: it, leaseToken: claim.lease_token })
       else setExtraerTarget({ ruta: it.ruta, documentoId: it.documento_id, leaseToken: claim.lease_token, ini: it.pagina_inicio ?? undefined, fin: it.pagina_fin ?? undefined, extraccionId: it.extraccion_id ?? undefined, reextra: it.estado !== 'pendiente', error: it.error })
+      opened = true
       void cargar(path, dash?.pagina)
     } catch (error) {
+      if (claim && !opened) void api.post(`/api/lotes/documentos/${it.documento_id}/release`, { lease_token: claim.lease_token }, { globalLoading: false }).catch(() => undefined)
       toast(error instanceof Error ? error.message : 'No se pudo reservar el documento', 'error')
       if (error instanceof ApiError && (error.status === 409 || error.status === 403)) void cargar(path, dash?.pagina)
     } finally { setClaiming(0) }
   }
 
-  const toggleSel = (id: number) => setSelected((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
+  const toggleSel = (id: number) => setSelected((p) => new Set(p).has(id) ? p.filter((x) => x !== id) : [...p, id])
   const errorIdsPagina = dash ? dash.items.filter((it) => it.error).map((it) => it.error!.id) : []
-  const allSel = errorIdsPagina.length > 0 && errorIdsPagina.every((id) => selected.includes(id))
+  const selectedSet = new Set(selected)
+  const dirsStatsMap = new Map(dirsStats.map((stat) => [stat.nombre, stat]))
+  const allSel = errorIdsPagina.length > 0 && errorIdsPagina.every((id) => selectedSet.has(id))
 
   return (
     <div>
@@ -252,7 +266,7 @@ export default function Dashboard() {
                 </thead>
                 <tbody>
                   {dirs.map((d) => {
-                    const s = dirsStats.find((x) => x.nombre === d)
+                    const s = dirsStatsMap.get(d)
                     const isFinal = s && s.total > 0
                     const destino = path ? `${path}/${d}` : d
                     return (
@@ -342,7 +356,7 @@ export default function Dashboard() {
                         <tr key={it.ruta} className={`${hasError ? 'bg-red-50' : realizado ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}>
                           <td className="max-w-[220px] px-2 py-1.5">
                             <span className="flex min-w-0 items-center gap-2 truncate">
-                              {hasError && <input type="checkbox" checked={selected.includes(it.error!.id)} onChange={() => toggleSel(it.error!.id)} />}
+                              {hasError && <input type="checkbox" checked={selectedSet.has(it.error!.id)} onChange={() => toggleSel(it.error!.id)} />}
                               <span className={hasError ? 'text-red-600' : pendiente ? 'text-slate-300' : 'text-emerald-600'}>{hasError ? '⚠' : pendiente ? '○' : '✓'}</span>
                               <span className={hasError ? 'truncate text-red-700' : pendiente ? 'truncate text-slate-700' : 'truncate text-emerald-800'}>📄 {it.nombre}</span>
                               {hasError ? <span className="shrink-0 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700">Error en digital</span> : !pendiente && <span className="shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">{it.estado === 'rehecho' ? 're-extraído' : 'realizado'}</span>}
@@ -393,7 +407,7 @@ export default function Dashboard() {
       )}
       {errorTarget && <ErrorModal archivo={errorTarget.item.nombre} observacionInicial={errorTarget.item.error?.observacion} onClose={closeError} onSave={guardarError} />}
       {showEnviar && <EnviarErroresModal ids={selected} onClose={() => setShowEnviar(false)} onSent={() => { setShowEnviar(false); toast('Enviado', 'success'); setSelected([]) }} />}
-      {extraerTarget && <ExtraerModal ruta={extraerTarget.ruta} documentoId={extraerTarget.documentoId} leaseToken={extraerTarget.leaseToken} ini={extraerTarget.ini} fin={extraerTarget.fin} extraccionId={extraerTarget.extraccionId} reextra={extraerTarget.reextra} error={extraerTarget.error ?? null} onClose={() => setExtraerTarget(null)} onLeaseLost={() => void cargar(path, dash?.pagina)} onGuardado={() => { void cargar(path, dash?.pagina); window.dispatchEvent(new Event('lotes:changed')) }} onErrorSaved={() => { void cargar(path, dash?.pagina); window.dispatchEvent(new Event('lotes:changed')) }} />}
+      {extraerTarget && <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 text-white">Cargando visor…</div>}><ExtraerModal ruta={extraerTarget.ruta} documentoId={extraerTarget.documentoId} leaseToken={extraerTarget.leaseToken} ini={extraerTarget.ini} fin={extraerTarget.fin} extraccionId={extraerTarget.extraccionId} reextra={extraerTarget.reextra} error={extraerTarget.error ?? null} onClose={() => setExtraerTarget(null)} onLeaseLost={() => void cargar(path, dash?.pagina)} onGuardado={() => { void cargar(path, dash?.pagina); window.dispatchEvent(new Event('lotes:changed')) }} onErrorSaved={() => { void cargar(path, dash?.pagina); window.dispatchEvent(new Event('lotes:changed')) }} /></Suspense>}
     </div>
   )
 }

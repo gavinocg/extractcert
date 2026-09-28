@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../store/auth'
 import CambiarPassword from './CambiarPassword'
@@ -32,15 +32,30 @@ export default function Layout() {
   const [mobileNav, setMobileNav] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [counts, setCounts] = useState({ pending: 0, supervision: 0 })
+  const countTimer = useRef<number | null>(null)
+  const loadCounts = useCallback(() => {
+    void api.get<{ pending: number; supervision: number }>('/api/lotes/counts', { globalLoading: false }).then(setCounts).catch(() => undefined)
+  }, [])
 
   useEffect(() => {
-    const loadCounts = () => {
-      void api.get<{ pending: number; supervision: number }>('/api/lotes/counts').then(setCounts).catch(() => undefined)
+    const scheduleCounts = () => {
+      if (countTimer.current !== null) window.clearTimeout(countTimer.current)
+      countTimer.current = window.setTimeout(loadCounts, 150)
     }
     loadCounts()
-    window.addEventListener('lotes:changed', loadCounts)
-    return () => window.removeEventListener('lotes:changed', loadCounts)
-  }, [location.pathname])
+    const interval = window.setInterval(loadCounts, 30_000)
+    const onVisibility = () => { if (document.visibilityState === 'visible') scheduleCounts() }
+    window.addEventListener('lotes:changed', scheduleCounts)
+    window.addEventListener('focus', scheduleCounts)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('lotes:changed', scheduleCounts)
+      window.removeEventListener('focus', scheduleCounts)
+      document.removeEventListener('visibilitychange', onVisibility)
+      if (countTimer.current !== null) window.clearTimeout(countTimer.current)
+    }
+  }, [loadCounts])
 
   const onLogout = async () => {
     setMenuAbierto(false)

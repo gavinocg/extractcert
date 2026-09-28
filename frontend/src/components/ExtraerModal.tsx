@@ -55,7 +55,7 @@ export default function ExtraerModal({ ruta, documentoId, leaseToken, ini = 0, f
     leaseActive.current = true
     const heartbeat = window.setInterval(() => {
       if (!leaseActive.current) return
-      api.post(`/api/lotes/documentos/${documentoId}/heartbeat`, { lease_token: leaseToken }).catch((cause) => {
+      api.post(`/api/lotes/documentos/${documentoId}/heartbeat`, { lease_token: leaseToken }, { globalLoading: false }).catch((cause) => {
         if (cause instanceof ApiError && (cause.status === 409 || cause.status === 403)) {
           leaseActive.current = false
           toast(cause.message, 'error')
@@ -69,7 +69,7 @@ export default function ExtraerModal({ ruta, documentoId, leaseToken, ini = 0, f
       releaseTimer.current = window.setTimeout(() => {
         if (leaseActive.current) {
           leaseActive.current = false
-          void api.post(`/api/lotes/documentos/${documentoId}/release`, { lease_token: leaseToken }).catch(() => undefined)
+          void api.post(`/api/lotes/documentos/${documentoId}/release`, { lease_token: leaseToken }, { globalLoading: false }).catch(() => undefined)
         }
       }, 150)
     }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-const DELAY_MS = 1000
+const DELAY_MS = 4000
 
 export default function LoadingOverlay() {
   const [visible, setVisible] = useState(false)

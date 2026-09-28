@@ -12,7 +12,7 @@
 
 ## Politica
 
-- Minimo 10 caracteres.
+- Minimo 6 caracteres.
 - Maximo 72 bytes para bcrypt.
 - Diferente de la contrasena actual.
 - No puede contener el username completo.
@@ -43,7 +43,7 @@ Resultado: acceso normal y la clave temporal deja de funcionar.
 
 Probar:
 
-- Menos de 10 caracteres.
+- Menos de 6 caracteres.
 - Mas de 72 bytes.
 - Username dentro de la contrasena.
 - Contrasena comun.

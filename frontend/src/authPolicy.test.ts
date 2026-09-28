@@ -18,9 +18,9 @@ describe('authRedirect', () => {
 
 describe('passwordPolicyError', () => {
   it('valida longitud, bytes UTF-8 y nombre de usuario', () => {
-    expect(passwordPolicyError('corta', 'operador')).toContain('10 caracteres')
+    expect(passwordPolicyError('corta', 'operador')).toContain('6 caracteres')
     expect(passwordPolicyError('á'.repeat(37), 'operador')).toContain('72 bytes')
     expect(passwordPolicyError('ClaveOPERADOR2026', 'operador')).toContain('usuario')
-    expect(passwordPolicyError('Clave-segura-2026', 'operador')).toBeNull()
+    expect(passwordPolicyError('Ab1!xy', 'operador')).toBeNull()
   })
 })

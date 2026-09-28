@@ -65,7 +65,7 @@ export default function CambiarPasswordObligatorio() {
           <PasswordField label="Contraseña actual" value={actual} onChange={setActual} autoFocus />
           <PasswordField label="Nueva contraseña" value={nueva} onChange={setNueva} />
           <PasswordField label="Confirmar nueva contraseña" value={confirmacion} onChange={setConfirmacion} />
-          <div className="rounded-lg bg-slate-50 px-3 py-2.5 text-xs leading-5 text-slate-600">Usa entre 10 caracteres y 72 bytes. No incluyas tu nombre de usuario. La contraseña debe ser distinta a la actual.</div>
+          <div className="rounded-lg bg-slate-50 px-3 py-2.5 text-xs leading-5 text-slate-600">Usa entre 6 caracteres y 72 bytes. No incluyas tu nombre de usuario. La contraseña debe ser distinta a la actual.</div>
           {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
           <button type="submit" disabled={busy} className="w-full rounded-lg bg-red-600 px-4 py-2.5 font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60">
             {busy ? 'Actualizando…' : 'Actualizar contraseña y continuar'}

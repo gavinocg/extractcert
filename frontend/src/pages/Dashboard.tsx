@@ -58,6 +58,7 @@ interface Dash {
   items: Item[]
   total: number
   pendientes_count: number
+  error_ids: number[]
   pagina_sugerida: number
 }
 
@@ -72,7 +73,7 @@ export default function Dashboard() {
   const [cargando, setCargando] = useState(true)
   const [errorTarget, setErrorTarget] = useState<{ item: Item; leaseToken: string } | null>(null)
   const [selected, setSelected] = useState<number[]>([])
-  const [showEnviar, setShowEnviar] = useState(false)
+  const [sendIds, setSendIds] = useState<number[] | null>(null)
   const [extraerTarget, setExtraerTarget] = useState<{ ruta: string; documentoId: number; leaseToken: string; ini?: number; fin?: number; extraccionId?: number; reextra?: boolean; error?: { id: number; observacion: string; username: string | null } | null } | null>(null)
   const [claiming, setClaiming] = useState(0)
   const toast = useToast((s) => s.show)
@@ -312,18 +313,24 @@ export default function Dashboard() {
                 </span>
               </div>
             )}
-            {dash && errorIdsPagina.length > 0 && (
+            {dash && dash.error_ids.length > 0 && (
               <div className="mb-2 flex items-center gap-2 text-xs">
-                <label className="flex items-center gap-1">
-                  <input type="checkbox" checked={allSel} onChange={() => setSelected(allSel ? [] : [...errorIdsPagina])} />
-                  Seleccionar errores pág
-                </label>
+                {errorIdsPagina.length > 0 && <label className="flex items-center gap-1">
+                    <input type="checkbox" checked={allSel} onChange={() => setSelected(allSel ? [] : [...errorIdsPagina])} />
+                    Seleccionar errores pág
+                  </label>}
                 <button
-                  onClick={() => setShowEnviar(true)}
+                  onClick={() => setSendIds(selected)}
                   disabled={selected.length === 0}
                   className="rounded bg-amber-600 px-2 py-1 text-white disabled:opacity-40"
                 >
                   Enviar ({selected.length})
+                </button>
+                <button
+                  onClick={() => setSendIds(dash.error_ids)}
+                  className="rounded bg-slate-800 px-2 py-1 text-white hover:bg-slate-700"
+                >
+                  Enviar todos ({dash.error_ids.length})
                 </button>
               </div>
             )}
@@ -366,14 +373,15 @@ export default function Dashboard() {
                               {activeLease ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">En uso por {reservedBy}</span> : <span className="hidden rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 sm:inline-flex">Disponible</span>}
                               {hasError && (
                                 <>
-                                  <button disabled={claiming === it.documento_id} onClick={() => void claimAndOpen(it, 'error')} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-white disabled:opacity-40">Ver/modificar error</button>
-                                  <button disabled={claiming === it.documento_id} onClick={() => void corregir(it)} className="rounded bg-emerald-600 px-2 py-1 text-xs text-white hover:bg-emerald-700 disabled:opacity-40">Corregido</button>
+                                  <button disabled={claiming === it.documento_id} onClick={() => void claimAndOpen(it, 'extract')} aria-label="Rehacer archivo" title="Rehacer" className="rounded border border-amber-300 px-2 py-1 text-amber-700 hover:bg-amber-50 disabled:opacity-40 sm:hidden"><span className="text-xl leading-none">↻</span></button>
+                                  <button disabled={claiming === it.documento_id} onClick={() => void claimAndOpen(it, 'error')} className="hidden rounded border border-slate-300 px-2 py-1 text-xs hover:bg-white disabled:opacity-40 sm:inline-flex">Ver/modificar error</button>
+                                  <button disabled={claiming === it.documento_id} onClick={() => void corregir(it)} className="hidden rounded bg-emerald-600 px-2 py-1 text-xs text-white hover:bg-emerald-700 disabled:opacity-40 sm:inline-flex">Corregido</button>
                                 </>
                               )}
                               {pendiente && !hasError ? (
                                 <button disabled={claiming === it.documento_id} onClick={() => void claimAndOpen(it, 'extract')} className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-40">Extraer</button>
                               ) : !hasError ? (
-                                <button disabled={claiming === it.documento_id} onClick={() => void claimAndOpen(it, 'extract')} aria-label="Reprocesar archivo" title="Reprocesar / crear nueva versión" className="rounded border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-40"><span className="text-xl leading-none sm:hidden">↻</span><span className="hidden sm:inline">Crear nueva versión</span></button>
+                                <button disabled={claiming === it.documento_id} onClick={() => void claimAndOpen(it, 'extract')} aria-label="Rehacer archivo" title="Rehacer / crear nueva versión" className="rounded border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-40"><span className="text-xl leading-none sm:hidden">↻</span><span className="hidden sm:inline">Crear nueva versión</span></button>
                               ) : null}
                             </span>
                           </td>
@@ -403,7 +411,7 @@ export default function Dashboard() {
         </div>
       )}
       {errorTarget && <ErrorModal archivo={errorTarget.item.nombre} observacionInicial={errorTarget.item.error?.observacion} onClose={closeError} onSave={guardarError} />}
-      {showEnviar && <EnviarErroresModal ids={selected} onClose={() => setShowEnviar(false)} onSent={() => { setShowEnviar(false); toast('Enviado', 'success'); setSelected([]) }} />}
+      {sendIds && <EnviarErroresModal ids={sendIds} onClose={() => setSendIds(null)} onSent={() => { setSendIds(null); toast('Enviado', 'success'); setSelected([]) }} />}
       {extraerTarget && <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 text-white">Cargando visor…</div>}><ExtraerModal ruta={extraerTarget.ruta} documentoId={extraerTarget.documentoId} leaseToken={extraerTarget.leaseToken} ini={extraerTarget.ini} fin={extraerTarget.fin} extraccionId={extraerTarget.extraccionId} reextra={extraerTarget.reextra} error={extraerTarget.error ?? null} onClose={() => setExtraerTarget(null)} onLeaseLost={() => void cargar(path, dash?.pagina)} onGuardado={() => { void cargar(path, dash?.pagina); window.dispatchEvent(new Event('lotes:changed')) }} onErrorSaved={() => { void cargar(path, dash?.pagina); window.dispatchEvent(new Event('lotes:changed')) }} /></Suspense>}
     </div>
   )

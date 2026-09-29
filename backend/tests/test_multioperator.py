@@ -90,6 +90,33 @@ def test_miembro_secundario_es_miembro_activo():
     assert lotes.is_member(db, lote.id, second.id)
 
 
+@pytest.mark.parametrize("role", ["supervisor", "administrador"])
+@pytest.mark.parametrize("accessor, lookup", [
+    (lotes.require_directory_access, "lote_for_directory"),
+    (lotes.require_path_access, "lote_for_document"),
+])
+def test_supervision_accede_a_lote_sin_ser_miembro(monkeypatch, role, accessor, lookup):
+    lote = SimpleNamespace(id=10)
+    monkeypatch.setattr(lotes, lookup, lambda _db, _path: lote)
+    monkeypatch.setattr(lotes, "is_member", lambda _db, _lote_id, _user_id: False)
+
+    assert accessor(SimpleNamespace(), SimpleNamespace(id=20, rol=role), "lote") is lote
+
+
+@pytest.mark.parametrize("accessor, lookup", [
+    (lotes.require_directory_access, "lote_for_directory"),
+    (lotes.require_path_access, "lote_for_document"),
+])
+def test_usuario_no_asignado_no_accede_a_lote(monkeypatch, accessor, lookup):
+    monkeypatch.setattr(lotes, lookup, lambda _db, _path: SimpleNamespace(id=10))
+    monkeypatch.setattr(lotes, "is_member", lambda _db, _lote_id, _user_id: False)
+
+    with pytest.raises(HTTPException) as forbidden:
+        accessor(SimpleNamespace(), SimpleNamespace(id=20, rol="usuario"), "lote")
+
+    assert forbidden.value.status_code == 403
+
+
 def test_replay_idempotente_del_mismo_autor_no_requiere_lease():
     db = database()
     first, _, lote, document = fixture_rows(db)

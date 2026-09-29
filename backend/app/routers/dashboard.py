@@ -149,6 +149,7 @@ def dashboard(
         "items": items,
         "total": total,
         "pendientes_count": pendientes_count,
+        "error_ids": [item.id for item in errores_all],
         "pagina_sugerida": pagina_sugerida,
     }
     # sync_documentos puede materializar inventario y enlazar históricos.

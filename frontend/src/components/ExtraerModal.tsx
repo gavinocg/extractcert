@@ -38,6 +38,8 @@ export default function ExtraerModal({ ruta, documentoId, leaseToken, ini = 0, f
   const [ayuda, setAyuda] = useState(false)
   const [showErrorModal, setShowErrorModal] = useState(false)
   const [errorLocal, setErrorLocal] = useState(error ?? null)
+  const [previewOrder, setPreviewOrder] = useState<number[]>([])
+  const [previewRotation, setPreviewRotation] = useState(0)
   const viewerRef = useRef<PdfViewerHandle>(null)
   const previewViewerRef = useRef<PdfViewerHandle>(null)
   const [originalZoom, setOriginalZoom] = useState(75)
@@ -83,6 +85,8 @@ export default function ExtraerModal({ ruta, documentoId, leaseToken, ini = 0, f
     setPrev(null)
     setPrevUrl('')
     setErrorLocal(error ?? null)
+    setPreviewOrder([])
+    setPreviewRotation(0)
   }, [ruta, ini, fin, error])
 
   const seleccionValida = pred.inicio > 0 && pred.fin >= pred.inicio
@@ -91,7 +95,10 @@ export default function ExtraerModal({ ruta, documentoId, leaseToken, ini = 0, f
     setBusyPre(true)
     try {
       const rot = viewerRef.current?.getRotation() ?? 0
-      const r = await api.post<PreviewResp>('/api/extracciones/preview', { ruta, inicio: pred.inicio, fin: pred.fin, rotacion: rot, documento_id: documentoId, lease_token: leaseToken })
+      const order = viewerRef.current?.getPageOrder() ?? []
+      const r = await api.post<PreviewResp>('/api/extracciones/preview', { ruta, inicio: pred.inicio, fin: pred.fin, rotacion: rot, orden_paginas: order, documento_id: documentoId, lease_token: leaseToken })
+      setPreviewOrder(order)
+      setPreviewRotation(rot)
       setPrevUrl(r.url)
       setPrev(r)
     } catch (e) {
@@ -112,8 +119,7 @@ export default function ExtraerModal({ ruta, documentoId, leaseToken, ini = 0, f
     if (!pred.inicio) return
     setBusyGuardar(true)
     try {
-      const rot = viewerRef.current?.getRotation() ?? 0
-      const r = await api.post<{ nombre: string }>('/api/extracciones/guardar', { ruta, inicio: pred.inicio, fin: pred.fin, reextra: reextra ? 1 : 0, extraccion_id: extraccionId, rotacion: rot, documento_id: documentoId, lease_token: leaseToken, idempotency_key: idempotencyKey.current, ...(nombre ? { nombre } : {}) })
+      const r = await api.post<{ nombre: string }>('/api/extracciones/guardar', { ruta, inicio: pred.inicio, fin: pred.fin, reextra: reextra ? 1 : 0, extraccion_id: extraccionId, rotacion: previewRotation, orden_paginas: previewOrder, documento_id: documentoId, lease_token: leaseToken, idempotency_key: idempotencyKey.current, ...(nombre ? { nombre } : {}) })
       leaseActive.current = false
       toast(`Extracción guardada: ${r.nombre}`, 'success')
       onGuardado()

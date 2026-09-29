@@ -4,7 +4,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -32,6 +32,7 @@ class OrigIn(BaseModel):
     inicio: int
     fin: int
     rotacion: int = 0
+    orden_paginas: list[int] = Field(default_factory=list)
 
 
 class GuardarIn(OrigIn):
@@ -71,7 +72,7 @@ def preview(
     limpiar_temporales()
     tmp = new_temp_filename(user.id)
     rot = int(body.rotacion) % 360 if hasattr(body, 'rotacion') else 0
-    extraer_paginas(original, body.inicio, body.fin, str(tmp), rotacion=rot)
+    extraer_paginas(original, body.inicio, body.fin, str(tmp), rotacion=rot, orden_paginas=body.orden_paginas)
     if not os.path.exists(tmp) or os.path.getsize(tmp) == 0:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "No se generó la vista previa.")
 
@@ -124,7 +125,11 @@ def guardar(
     reg = db.query(Extraccion).filter(Extraccion.documento_id == documento.id).with_for_update().first()
     if body.reextra and not reg:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No existe una extracción previa.")
-    estado = "rehecho" if reg else "realizado"
+    natural_order = list(range(body.inicio, body.fin + 1))
+    selected_order = list(dict.fromkeys(page for page in body.orden_paginas if body.inicio <= page <= body.fin))
+    selected_order.extend(page for page in natural_order if page not in selected_order)
+    modified = bool(body.nombre.strip()) or selected_order != natural_order
+    estado = "modificado" if modified else "rehecho" if reg else "realizado"
     version = documento.version + 1
     pedido = os.path.basename(body.nombre.strip()) if body.nombre else os.path.basename(original)
     if not pedido.lower().endswith(".pdf"): pedido += ".pdf"
@@ -157,7 +162,7 @@ def guardar(
     installed = False
     committed = False
     try:
-        extraer_paginas(original, body.inicio, body.fin, temp_output, rotacion=rot2)
+        extraer_paginas(original, body.inicio, body.fin, temp_output, rotacion=rot2, orden_paginas=selected_order)
         if not os.path.isfile(temp_output) or os.path.getsize(temp_output) == 0:
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "No se pudo generar el archivo.")
         if reg and os.path.isfile(destino):

@@ -356,7 +356,7 @@ export default function Dashboard() {
                               {hasError && <input type="checkbox" checked={selectedSet.has(it.error!.id)} onChange={() => toggleSel(it.error!.id)} />}
                               <span className={hasError ? 'text-red-600' : pendiente ? 'text-slate-300' : 'text-emerald-600'}>{hasError ? '⚠' : pendiente ? '○' : '✓'}</span>
                               <span className={hasError ? 'truncate text-red-700' : pendiente ? 'truncate text-slate-700' : 'truncate text-emerald-800'}>📄 {it.nombre}</span>
-                              {hasError ? <span className="shrink-0 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700">Error en digital</span> : !pendiente && <span className="shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">{it.estado === 'rehecho' ? 're-extraído' : 'realizado'}</span>}
+                               {hasError ? <span className="shrink-0 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700">Error en digital</span> : !pendiente && <span className="shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">{it.estado === 'modificado' ? 'modificado' : it.estado === 'rehecho' ? 're-extraído' : 'realizado'}</span>}
                             </span>
                           </td>
                           <td className="hidden whitespace-nowrap px-2 py-1.5 text-slate-600 sm:table-cell">{usuario}</td>

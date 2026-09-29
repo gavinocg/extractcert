@@ -212,7 +212,7 @@ class Extraccion(Base):
     pagina_inicio: Mapped[int] = mapped_column(Integer, nullable=False)
     pagina_fin: Mapped[int] = mapped_column(Integer, nullable=False)
     estado: Mapped[str] = mapped_column(
-        Enum("realizado", "rehecho", name="estado"),
+        Enum("realizado", "rehecho", "modificado", name="estado"),
         default="realizado",
         nullable=False,
     )

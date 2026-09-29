@@ -17,7 +17,7 @@ def _abrir(src: str) -> fitz.Document:
     return doc
 
 
-def extraer_paginas(src: str, inicio: int, fin: int, destino: str, rotacion: int = 0) -> int:
+def extraer_paginas(src: str, inicio: int, fin: int, destino: str, rotacion: int = 0, orden_paginas: list[int] | None = None) -> int:
     """Extrae páginas [inicio..fin] (1-indexadas) a 'destino'. Devuelve nº de páginas."""
     doc = _abrir(src)
     total = doc.page_count
@@ -30,7 +30,12 @@ def extraer_paginas(src: str, inicio: int, fin: int, destino: str, rotacion: int
 
     try:
         out = fitz.open()
-        out.insert_pdf(doc, from_page=inicio - 1, to_page=fin - 1)
+        natural = list(range(inicio, fin + 1))
+        ordered = [page for page in (orden_paginas or []) if inicio <= page <= fin]
+        ordered = list(dict.fromkeys(ordered))
+        ordered.extend(page for page in natural if page not in ordered)
+        for page in ordered:
+            out.insert_pdf(doc, from_page=page - 1, to_page=page - 1)
         if rotacion % 360 != 0:
             for p in out:
                 p.set_rotation((p.rotation + rotacion) % 360)

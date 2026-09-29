@@ -70,10 +70,11 @@ def test_guardado_plano_colision_y_reextraccion_reemplaza(tmp_path: Path, monkey
     monkeypatch.setattr(extraccion, "raiz_repo", lambda _: str(repo))
     monkeypatch.setattr(extraccion, "extraer_paginas", lambda _src, inicio, _fin, destino, **_kwargs: Path(destino).write_bytes(f"pagina-{inicio}".encode()))
 
-    first = extraccion.guardar(GuardarIn(ruta=str(first_pdf), documento_id=first_doc.id, lease_token="lease-1", inicio=1, fin=1, idempotency_key="save-1"), user, db, None)
+    first = extraccion.guardar(GuardarIn(ruta=str(first_pdf), documento_id=first_doc.id, lease_token="lease-1", inicio=1, fin=1, nombre="2369926.pdf", idempotency_key="save-1"), user, db, None)
     second = extraccion.guardar(GuardarIn(ruta=str(second_pdf), documento_id=second_doc.id, lease_token="lease-2", inicio=2, fin=2, idempotency_key="save-2"), user, db, None)
     assert Path(first["destino"]).parent == repo
     assert Path(first["destino"]).name == "2369926.pdf"
+    assert first["estado"] == "modificado"
     assert Path(second["destino"]).name == "2369926C.pdf"
 
     first_doc = db.get(LoteDocumento, first_doc.id)
@@ -81,7 +82,8 @@ def test_guardado_plano_colision_y_reextraccion_reemplaza(tmp_path: Path, monkey
     first_doc.lease_token = "lease-reextra"
     first_doc.lease_expires_at = datetime.now() + timedelta(minutes=10)
     db.commit()
-    redone = extraccion.guardar(GuardarIn(ruta=str(first_pdf), documento_id=first_doc.id, lease_token="lease-reextra", inicio=3, fin=3, reextra=1, extraccion_id=first["extraccion_id"], idempotency_key="save-3"), user, db, None)
+    redone = extraccion.guardar(GuardarIn(ruta=str(first_pdf), documento_id=first_doc.id, lease_token="lease-reextra", inicio=1, fin=3, orden_paginas=[3, 2, 1], reextra=1, extraccion_id=first["extraccion_id"], idempotency_key="save-3"), user, db, None)
     assert redone["destino"] == first["destino"]
-    assert Path(redone["destino"]).read_bytes() == b"pagina-3"
+    assert redone["estado"] == "modificado"
+    assert Path(redone["destino"]).read_bytes() == b"pagina-1"
     assert not any(path.is_dir() for path in repo.iterdir())

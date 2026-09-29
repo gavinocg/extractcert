@@ -113,9 +113,10 @@ def test_admin_puede_solicitar_cambio_repetidamente():
     db = database()
     admin = user(db, "admin", "Clave-admin-2026", rol="administrador")
     target = user(db, "target", "Clave-target-2026", must_change_password=True)
+    body = usuarios.UsuarioIn(username="target", must_change_password=True)
 
-    usuarios.forzar_cambio_password(target.id, request(), admin, db, None)
-    usuarios.forzar_cambio_password(target.id, request(), admin, db, None)
+    usuarios.actualizar(target.id, body, request(), admin, db, None)
+    usuarios.actualizar(target.id, body, request(), admin, db, None)
 
     assert target.must_change_password
     assert target.token_version == 3

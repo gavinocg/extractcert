@@ -23,6 +23,10 @@ export interface PdfViewerHandle {
   page: number
   next: () => void
   prev: () => void
+  zoomIn: () => void
+  zoomOut: () => void
+  resetZoom: () => void
+  getZoom: () => number
 }
 
 interface Props {
@@ -39,10 +43,12 @@ interface Props {
   zoomCtrl?: boolean
   mobileTouch?: boolean
   mobileRotationGesture?: boolean
+  hideMobileZoomControls?: boolean
+  onZoomChange?: (zoom: number) => void
 }
 
 const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
-  { seleccion, fit, url, ini, fin, onSeleccion, onPage, onError, vertical, zoomRueda, zoomCtrl, mobileTouch = false, mobileRotationGesture = false },
+  { seleccion, fit, url, ini, fin, onSeleccion, onPage, onError, vertical, zoomRueda, zoomCtrl, mobileTouch = false, mobileRotationGesture = false, hideMobileZoomControls = false, onZoomChange },
   ref,
 ) {
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -72,6 +78,10 @@ const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
   const touchPointsRef = useRef(new Map<number, { x: number; y: number }>())
   const pinchRef = useRef({ distance: 0, zoom: 75, angle: 0, rotation: 0 })
   const rotationHintTimer = useRef<number | null>(null)
+  const [resetHint, setResetHint] = useState(false)
+  const resetHintTimer = useRef<number | null>(null)
+  const tapRef = useRef({ time: 0, x: 0, y: 0 })
+  const pointerStartRef = useRef({ id: -1, x: 0, y: 0, moved: false, multi: false })
 
   useEffect(() => {
     if (numPages > 0 && pageOrder.length !== numPages) {
@@ -80,9 +90,21 @@ const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
   }, [numPages])
 
   useEffect(() => { zoomRef.current = zoom }, [zoom])
+  useEffect(() => { onZoomChange?.(zoom) }, [zoom, onZoomChange])
 
   useEffect(() => () => {
     if (rotationHintTimer.current !== null) window.clearTimeout(rotationHintTimer.current)
+    if (resetHintTimer.current !== null) window.clearTimeout(resetHintTimer.current)
+  }, [])
+
+  const resetZoom = useCallback(() => {
+    zoomRef.current = 75
+    setZoom(75)
+    const el = wrapRef.current
+    if (el) el.scrollLeft = 0
+    setResetHint(true)
+    if (resetHintTimer.current !== null) window.clearTimeout(resetHintTimer.current)
+    resetHintTimer.current = window.setTimeout(() => setResetHint(false), 800)
   }, [])
 
   const handleDragStart = useCallback((e: React.DragEvent<HTMLButtonElement>, pageNum: number) => {
@@ -304,8 +326,12 @@ const handleDragEnd = useCallback(() => {
       page,
       next: () => ver(page + 1),
       prev: () => ver(page - 1),
+      zoomIn: () => setZoom((value) => Math.min(MOBILE_MAX_ZOOM, value + 25)),
+      zoomOut: () => setZoom((value) => Math.max(25, value - 25)),
+      resetZoom,
+      getZoom: () => zoomRef.current,
     }),
-    [cargar, inicio, finS, page, ver],
+    [cargar, inicio, finS, page, ver, resetZoom],
   )
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -361,6 +387,8 @@ const handleDragEnd = useCallback(() => {
         e.currentTarget.setPointerCapture(e.pointerId)
         touchPointsRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
         const points = [...touchPointsRef.current.values()]
+        if (points.length === 1) pointerStartRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, multi: false }
+        else pointerStartRef.current.multi = true
         if (points.length === 2) {
           pinchRef.current = {
             distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y),
@@ -385,6 +413,8 @@ const handleDragEnd = useCallback(() => {
   const moverPan = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const el = wrapRef.current
     if (mobileGestures && e.pointerType === 'touch' && touchPointsRef.current.has(e.pointerId)) {
+      const start = pointerStartRef.current
+      if (start.id === e.pointerId && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) start.moved = true
       touchPointsRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
       const points = [...touchPointsRef.current.values()]
       if (points.length >= 2 && pinchRef.current.distance > 0) {
@@ -421,6 +451,8 @@ const handleDragEnd = useCallback(() => {
 
   const finPuntero = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType === 'touch') {
+      const started = pointerStartRef.current
+      const wasSingleTap = started.id === e.pointerId && !started.moved && !started.multi && touchPointsRef.current.size === 1
       touchPointsRef.current.delete(e.pointerId)
       const el = wrapRef.current
       const remaining = [...touchPointsRef.current.values()]
@@ -430,10 +462,20 @@ const handleDragEnd = useCallback(() => {
       } else if (!remaining.length) {
         finPan()
       }
+      if (wasSingleTap) {
+        const now = Date.now()
+        const closeToLast = Math.hypot(e.clientX - tapRef.current.x, e.clientY - tapRef.current.y) <= 30
+        if (now - tapRef.current.time <= 300 && closeToLast) {
+          tapRef.current.time = 0
+          resetZoom()
+        } else {
+          tapRef.current = { time: now, x: e.clientX, y: e.clientY }
+        }
+      }
       return
     }
     finPan()
-  }, [finPan])
+  }, [finPan, resetZoom])
 
   useEffect(() => {
     canvasMapRef.current.clear()
@@ -581,7 +623,7 @@ const handleDragEnd = useCallback(() => {
         >
           ›
         </button>
-        {mobileGestures && <><div className="h-4 w-px bg-slate-200" /><button onClick={() => setZoom((value) => Math.max(25, value - 25))} className="min-h-10 min-w-10 rounded border border-slate-300 px-2 py-1 text-xs font-bold" aria-label="Alejar">−</button><span className="min-w-11 text-center text-[11px] font-semibold text-slate-500">{zoom}%</span><button onClick={() => setZoom((value) => Math.min(MOBILE_MAX_ZOOM, value + 25))} className="min-h-10 min-w-10 rounded border border-slate-300 px-2 py-1 text-xs font-bold" aria-label="Acercar">+</button></>}
+        {mobileGestures && !hideMobileZoomControls && <><div className="h-4 w-px bg-slate-200" /><button onClick={() => setZoom((value) => Math.max(25, value - 25))} className="min-h-10 min-w-10 rounded border border-slate-300 px-2 py-1 text-xs font-bold" aria-label="Alejar">−</button><span className="min-w-11 text-center text-[11px] font-semibold text-slate-500">{zoom}%</span><button onClick={() => setZoom((value) => Math.min(MOBILE_MAX_ZOOM, value + 25))} className="min-h-10 min-w-10 rounded border border-slate-300 px-2 py-1 text-xs font-bold" aria-label="Acercar">+</button></>}
       </div>
 
       <div
@@ -596,6 +638,7 @@ const handleDragEnd = useCallback(() => {
       >
         {showGestureHint && !cargando && <div className="pointer-events-none sticky left-1/2 top-2 z-10 w-fit -translate-x-1/2 rounded-full bg-slate-900/75 px-3 py-1 text-[11px] font-medium text-white shadow">{mobileRotationGesture ? 'Pellizca · Arrastra · Gira' : 'Pellizca · Arrastra'}</div>}
         {gestureRotation !== null && <div className="pointer-events-none fixed left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-950/80 px-5 py-3 text-xl font-bold text-white shadow-xl">{gestureRotation}°</div>}
+        {resetHint && <div className="pointer-events-none fixed left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-950/80 px-4 py-2 text-sm font-bold text-white shadow-xl">Ajustado al ancho</div>}
         {cargando ? (
           <div className="flex h-full min-h-[300px] items-center justify-center text-slate-400">
             Cargando PDF…

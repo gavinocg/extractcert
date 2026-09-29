@@ -357,7 +357,14 @@ export default function Dashboard() {
                       const leaseOwner = it.lease?.reservado_por
                       const reservedBy = leaseOwner && typeof leaseOwner === 'object' ? (leaseOwner.nombre || leaseOwner.username) : leaseOwner === user?.id ? 'ti' : `usuario ${leaseOwner}`
                       return (
-                        <tr key={it.ruta} className={`${hasError ? 'bg-red-50' : realizado ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}>
+                        <tr
+                          key={it.ruta}
+                          onClick={(event) => {
+                            if ((event.target as HTMLElement).closest('button, input, a')) return
+                            void claimAndOpen(it, 'extract')
+                          }}
+                          className={`cursor-pointer ${hasError ? 'bg-red-50 hover:bg-red-100' : realizado ? 'bg-emerald-50 hover:bg-emerald-100' : 'hover:bg-slate-50'}`}
+                        >
                           <td className="max-w-[220px] px-2 py-1.5">
                             <span className="flex min-w-0 items-center gap-2 truncate">
                               {hasError && <input type="checkbox" checked={selectedSet.has(it.error!.id)} onChange={() => toggleSel(it.error!.id)} />}

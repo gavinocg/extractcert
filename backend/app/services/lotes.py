@@ -52,6 +52,8 @@ def require_path_access(db: Session, user: User, path: str) -> Lote | None:
         if user.rol in ("supervisor", "administrador"):
             return None
         raise HTTPException(status.HTTP_403_FORBIDDEN, "El PDF no pertenece a un lote asignado.")
+    if user.rol in ("supervisor", "administrador"):
+        return lote
     if not is_member(db, lote.id, user.id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "El PDF no pertenece a un lote asignado.")
     return lote
@@ -63,6 +65,8 @@ def require_directory_access(db: Session, user: User, path: str) -> Lote | None:
         if user.rol in ("supervisor", "administrador"):
             return None
         raise HTTPException(status.HTTP_403_FORBIDDEN, "El lote no está asignado al usuario.")
+    if user.rol in ("supervisor", "administrador"):
+        return lote
     if not is_member(db, lote.id, user.id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "El lote no está asignado al usuario.")
     return lote

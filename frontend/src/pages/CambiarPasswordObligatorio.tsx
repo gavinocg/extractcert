@@ -27,7 +27,7 @@ function PasswordField({ label, value, onChange, autoFocus = false }: { label: s
 }
 
 export default function CambiarPasswordObligatorio() {
-  const { user, changePassword } = useAuth()
+  const { user, changePassword, logout } = useAuth()
   const navigate = useNavigate()
   const [actual, setActual] = useState('')
   const [nueva, setNueva] = useState('')
@@ -52,6 +52,19 @@ export default function CambiarPasswordObligatorio() {
     }
   }
 
+  const cancel = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      await logout()
+    } catch {
+      // El store limpia la sesión local incluso si la cookie ya expiró.
+    } finally {
+      navigate('/login', { replace: true })
+      setBusy(false)
+    }
+  }
+
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-8 sm:flex sm:items-center sm:justify-center">
       <section className="mx-auto w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl shadow-black/30">
@@ -67,9 +80,12 @@ export default function CambiarPasswordObligatorio() {
           <PasswordField label="Confirmar nueva contraseña" value={confirmacion} onChange={setConfirmacion} />
           <div className="rounded-lg bg-slate-50 px-3 py-2.5 text-xs leading-5 text-slate-600">Usa entre 6 caracteres y 72 bytes. No incluyas tu nombre de usuario. La contraseña debe ser distinta a la actual.</div>
           {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
-          <button type="submit" disabled={busy} className="w-full rounded-lg bg-red-600 px-4 py-2.5 font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60">
-            {busy ? 'Actualizando…' : 'Actualizar contraseña y continuar'}
-          </button>
+          <div className="grid gap-2 sm:grid-cols-[auto_1fr]">
+            <button type="button" onClick={() => void cancel()} disabled={busy} className="rounded-lg border border-slate-300 px-4 py-2.5 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">Cancelar</button>
+            <button type="submit" disabled={busy} className="rounded-lg bg-red-600 px-4 py-2.5 font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60">
+              {busy ? 'Actualizando…' : 'Actualizar contraseña y continuar'}
+            </button>
+          </div>
         </form>
       </section>
     </main>

@@ -153,13 +153,14 @@ def actualizar(
     u.estado = new_status
     password_changed = bool(body.password)
     obligation_changed = body.must_change_password is not None and body.must_change_password != u.must_change_password
+    force_change_requested = body.must_change_password is True
     if body.password:
         u.password_hash = security.hash_password(body.password)
         u.password_changed_at = datetime.now()
     if body.must_change_password is not None:
         u.must_change_password = body.must_change_password
     audit_event = None
-    if password_changed or obligation_changed:
+    if password_changed or obligation_changed or force_change_requested:
         u.token_version += 1
         audit_event = "reset_password" if password_changed else "force_password_change"
     try:
@@ -169,24 +170,6 @@ def actualizar(
         raise HTTPException(status.HTTP_409_CONFLICT, "El usuario o correo ya está registrado.")
     if audit_event:
         record(db, audit_event, u.id, user.id, request.client.host if request.client else None)
-    return {"ok": True}
-
-
-@router.post("/{user_id}/forzar-cambio-password")
-def forzar_cambio_password(
-    user_id: int,
-    request: Request,
-    user: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-    _: None = Depends(require_csrf),
-):
-    target = db.get(User, user_id)
-    if not target:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuario no existe.")
-    target.must_change_password = True
-    target.token_version += 1
-    db.commit()
-    record(db, "force_password_change", target.id, user.id, request.client.host if request.client else None)
     return {"ok": True}
 
 

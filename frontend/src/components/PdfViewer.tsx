@@ -37,10 +37,12 @@ interface Props {
   vertical?: boolean
   zoomRueda?: boolean
   zoomCtrl?: boolean
+  mobileTouch?: boolean
+  mobileRotationGesture?: boolean
 }
 
 const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
-  { seleccion, fit, url, ini, fin, onSeleccion, onPage, onError, vertical, zoomRueda, zoomCtrl },
+  { seleccion, fit, url, ini, fin, onSeleccion, onPage, onError, vertical, zoomRueda, zoomCtrl, mobileTouch = false, mobileRotationGesture = false },
   ref,
 ) {
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -66,8 +68,10 @@ const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
   const panRef = useRef({ activo: false, x: 0, y: 0, left: 0, top: 0 })
   const [mobileGestures, setMobileGestures] = useState(false)
   const [showGestureHint, setShowGestureHint] = useState(false)
+  const [gestureRotation, setGestureRotation] = useState<number | null>(null)
   const touchPointsRef = useRef(new Map<number, { x: number; y: number }>())
-  const pinchRef = useRef({ distance: 0, zoom: 75 })
+  const pinchRef = useRef({ distance: 0, zoom: 75, angle: 0, rotation: 0 })
+  const rotationHintTimer = useRef<number | null>(null)
 
   useEffect(() => {
     if (numPages > 0 && pageOrder.length !== numPages) {
@@ -76,6 +80,10 @@ const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
   }, [numPages])
 
   useEffect(() => { zoomRef.current = zoom }, [zoom])
+
+  useEffect(() => () => {
+    if (rotationHintTimer.current !== null) window.clearTimeout(rotationHintTimer.current)
+  }, [])
 
   const handleDragStart = useCallback((e: React.DragEvent<HTMLButtonElement>, pageNum: number) => {
     dragSrcRef.current = e.currentTarget
@@ -324,13 +332,13 @@ const handleDragEnd = useCallback(() => {
   }, [gestoRueda, zoomCtrl])
 
   useEffect(() => {
-    if (!zoomCtrl) { setMobileGestures(false); return }
+    if (!zoomCtrl && !mobileTouch) { setMobileGestures(false); return }
     const media = window.matchMedia('(max-width: 767px)')
     const update = () => setMobileGestures(media.matches && (navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches))
     update()
     media.addEventListener('change', update)
     return () => media.removeEventListener('change', update)
-  }, [zoomCtrl])
+  }, [zoomCtrl, mobileTouch])
 
   useEffect(() => {
     if (!mobileGestures) { setShowGestureHint(false); return }
@@ -354,7 +362,12 @@ const handleDragEnd = useCallback(() => {
         touchPointsRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
         const points = [...touchPointsRef.current.values()]
         if (points.length === 2) {
-          pinchRef.current = { distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y), zoom: zoomRef.current }
+          pinchRef.current = {
+            distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y),
+            zoom: zoomRef.current,
+            angle: Math.atan2(points[1].y - points[0].y, points[1].x - points[0].x) * 180 / Math.PI,
+            rotation: rotRef.current,
+          }
         } else if (points.length === 1) {
           panRef.current = { activo: true, x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop }
           setPaniendo(true)
@@ -378,6 +391,21 @@ const handleDragEnd = useCallback(() => {
         const currentDistance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y)
         const ratio = currentDistance / pinchRef.current.distance
         setZoom(Math.min(MOBILE_MAX_ZOOM, Math.max(25, Math.round(pinchRef.current.zoom * ratio))))
+        if (mobileRotationGesture) {
+          const currentAngle = Math.atan2(points[1].y - points[0].y, points[1].x - points[0].x) * 180 / Math.PI
+          let delta = currentAngle - pinchRef.current.angle
+          if (delta > 180) delta -= 360
+          if (delta < -180) delta += 360
+          const steps = Math.round(delta / 90)
+          const nextRotation = (pinchRef.current.rotation + steps * 90 + 360) % 360
+          if (nextRotation !== rotRef.current) {
+            rotRef.current = nextRotation
+            setRot(nextRotation)
+            setGestureRotation(nextRotation)
+            if (rotationHintTimer.current !== null) window.clearTimeout(rotationHintTimer.current)
+            rotationHintTimer.current = window.setTimeout(() => setGestureRotation(null), 900)
+          }
+        }
       } else if (points.length === 1 && el) {
         const p = panRef.current
         el.scrollLeft = p.left - (points[0].x - p.x)
@@ -389,7 +417,7 @@ const handleDragEnd = useCallback(() => {
     if (!p.activo || !el) return
     el.scrollLeft = p.left - (e.clientX - p.x)
     el.scrollTop = p.top - (e.clientY - p.y)
-  }, [mobileGestures])
+  }, [mobileGestures, mobileRotationGesture])
 
   const finPuntero = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType === 'touch') {
@@ -509,8 +537,8 @@ const handleDragEnd = useCallback(() => {
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl bg-white shadow-sm">
       <div className="flex items-center gap-1 border-b border-slate-200 px-1.5 py-1.5 sm:gap-2 sm:px-3 sm:py-2">
-        <button onClick={rotateLeft} className="min-h-10 min-w-10 rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 sm:min-h-0 sm:min-w-0" title="Girar izquierda" aria-label="Girar izquierda">↺</button>
-        <button onClick={rotateRight} className="min-h-10 min-w-10 rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 sm:min-h-0 sm:min-w-0" title="Girar derecha" aria-label="Girar derecha">↻</button>
+        <button onClick={rotateLeft} className={`${mobileRotationGesture ? 'hidden sm:inline-flex' : 'inline-flex'} min-h-10 min-w-10 items-center justify-center rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 sm:min-h-0 sm:min-w-0`} title="Girar izquierda" aria-label="Girar izquierda">↺</button>
+        <button onClick={rotateRight} className={`${mobileRotationGesture ? 'hidden sm:inline-flex' : 'inline-flex'} min-h-10 min-w-10 items-center justify-center rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 sm:min-h-0 sm:min-w-0`} title="Girar derecha" aria-label="Girar derecha">↻</button>
         <div className="h-4 w-px bg-slate-200" />
         <button
           onClick={() => ver(page - 1)}
@@ -566,7 +594,8 @@ const handleDragEnd = useCallback(() => {
         className={`relative flex-1 overflow-auto p-2 ${gestoRueda ? (paniendo ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
         style={{ minHeight: 360, touchAction: mobileGestures ? 'none' : 'auto' }}
       >
-        {showGestureHint && !cargando && <div className="pointer-events-none sticky left-1/2 top-2 z-10 w-fit -translate-x-1/2 rounded-full bg-slate-900/75 px-3 py-1 text-[11px] font-medium text-white shadow">Pellizca · Arrastra</div>}
+        {showGestureHint && !cargando && <div className="pointer-events-none sticky left-1/2 top-2 z-10 w-fit -translate-x-1/2 rounded-full bg-slate-900/75 px-3 py-1 text-[11px] font-medium text-white shadow">{mobileRotationGesture ? 'Pellizca · Arrastra · Gira' : 'Pellizca · Arrastra'}</div>}
+        {gestureRotation !== null && <div className="pointer-events-none fixed left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-950/80 px-5 py-3 text-xl font-bold text-white shadow-xl">{gestureRotation}°</div>}
         {cargando ? (
           <div className="flex h-full min-h-[300px] items-center justify-center text-slate-400">
             Cargando PDF…
@@ -585,8 +614,8 @@ const handleDragEnd = useCallback(() => {
             ))}
           </div>
         ) : (
-          <div className="flex min-w-fit justify-center">
-            <canvas ref={canvasRef} />
+          <div className={mobileGestures ? 'pdf-mobile-track flex justify-start' : 'flex min-w-fit justify-center'}>
+            <canvas ref={canvasRef} className={mobileGestures ? 'pdf-mobile-preview' : ''} />
           </div>
         )}
       </div>

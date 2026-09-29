@@ -213,8 +213,8 @@ export default function Dashboard() {
 
   return (
     <div>
-      <h1 className="mb-1 text-2xl font-bold text-slate-800">Bandeja</h1>
-      <p className="mb-4 text-sm text-slate-500">Navega las carpetas y extrae certificados.</p>
+      <h1 className="mb-1 text-2xl font-bold text-slate-800">Bandeja pendientes</h1>
+      <p className="mb-4 text-sm text-slate-500">Extrae Certificados de archivos PDF</p>
 
       {dash && (
         <div className="mb-4 flex flex-wrap items-center gap-1 rounded-lg bg-white px-3 py-2 text-sm shadow-sm">
@@ -253,10 +253,7 @@ export default function Dashboard() {
       ) : (
         <div className="flex flex-col gap-4">
           <div className="rounded-xl bg-white p-4 shadow-sm">
-            <div className="mb-3 text-sm font-semibold text-slate-700">Carpetas</div>
-{dirs.length === 0 ? (
-              <div className="text-sm text-slate-400">Sin subdirectorios.</div>
-            ) : (
+            {dirs.length > 0 && (
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs text-slate-400">

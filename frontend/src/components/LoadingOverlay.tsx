@@ -39,7 +39,7 @@ export default function LoadingOverlay() {
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/25 backdrop-blur-[2px]" role="status" aria-live="polite" aria-label="Cargando datos">
       <div className="flex items-center gap-3 rounded-2xl border border-white/60 bg-white/90 px-6 py-4 shadow-2xl">
         <span className="h-7 w-7 animate-spin rounded-full border-4 border-slate-200 border-t-red-600" aria-hidden="true" />
-        <span className="font-semibold text-slate-800">Cargando datos...</span>
+        <span className="font-semibold text-slate-800">Procesando, un momento...</span>
       </div>
     </div>
   )

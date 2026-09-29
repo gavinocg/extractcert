@@ -8,7 +8,6 @@ const nav = [
   { to: '/', label: 'Pendientes', icon: 'M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10' },
   { to: '/historial', label: 'Historial', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
   { to: '/errores', label: 'Errores', icon: 'M12 9v2m0 4h.01M10.3 4.3a8 8 0 013.4 0l.6 1.7 1.8-.5a8 8 0 012.4 2.4l-.5 1.8 1.7.6a8 8 0 010 3.4l-1.7.6.5 1.8a8 8 0 01-2.4 2.4l-1.8-.5-.6 1.7a8 8 0 01-3.4 0l-.6-1.7-1.8.5a8 8 0 01-2.4-2.4l.5-1.8-1.7-.6a8 8 0 010-3.4l1.7-.6-.5-1.8a8 8 0 012.4-2.4l1.8.5.6-1.7z' },
-  { to: '/contactos', label: 'Contactos', icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87M16 3.13a4 4 0 010 7.75' },
 ]
 
 export default function Layout() {
@@ -24,8 +23,7 @@ export default function Layout() {
     { to: '/archivados', label: 'Archivados', icon: 'M4 7h16v12H4zM3 4h18v3H3zM9 11h6' },
     { to: '/asignar', label: 'Asignar', icon: 'M9 12h6m-3-3v6M4 6h16v14H4z' },
   ] : []
-  const roleNav = isSupervisor || isAdmin ? nav : nav.filter((item) => item.to !== '/contactos')
-  const items = isAdmin ? [...roleNav, ...supervisorNav, { to: '/observaciones', label: 'Observaciones', icon: 'M4 6h16M4 12h16M4 18h10' }, { to: '/usuarios', label: 'Usuarios', icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87M16 3.13a4 4 0 010 7.75M12 12a4 4 0 100-8 4 4 0 000 8z' }, { to: '/config', label: 'Configuración', icon: 'M10.3 4.3a8 8 0 013.4 0l.6 1.7 1.8-.5a8 8 0 012.4 2.4l-.5 1.8 1.7.6a8 8 0 010 3.4l-1.7.6.5 1.8a8 8 0 01-2.4 2.4l-1.8-.5-.6 1.7a8 8 0 01-3.4 0l-.6-1.7-1.8.5a8 8 0 01-2.4-2.4l.5-1.8-1.7-.6a8 8 0 010-3.4l1.7-.6-.5-1.8a8 8 0 012.4-2.4l1.8.5.6-1.7zM12 15a3 3 0 100-6 3 3 0 000 6z' }] : [...roleNav, ...supervisorNav]
+  const items = isAdmin ? [...nav, ...supervisorNav, { to: '/observaciones', label: 'Observaciones', icon: 'M4 6h16M4 12h16M4 18h10' }, { to: '/usuarios', label: 'Usuarios', icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87M16 3.13a4 4 0 010 7.75M12 12a4 4 0 100-8 4 4 0 000 8z' }, { to: '/contactos', label: 'Contactos', icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87M16 3.13a4 4 0 010 7.75' }, { to: '/config', label: 'Configuración', icon: 'M10.3 4.3a8 8 0 013.4 0l.6 1.7 1.8-.5a8 8 0 012.4 2.4l-.5 1.8 1.7.6a8 8 0 010 3.4l-1.7.6.5 1.8a8 8 0 01-2.4 2.4l-1.8-.5-.6 1.7a8 8 0 01-3.4 0l-.6-1.7-1.8.5a8 8 0 01-2.4-2.4l.5-1.8-1.7-.6a8 8 0 010-3.4l1.7-.6-.5-1.8a8 8 0 012.4-2.4l1.8.5.6-1.7zM12 15a3 3 0 100-6 3 3 0 000 6z' }] : [...nav, ...supervisorNav]
   const roleLabel = isAdmin ? 'Administrador' : isSupervisor ? 'Supervisor' : 'Operador'
 
   const [menuAbierto, setMenuAbierto] = useState(false)
@@ -71,7 +69,7 @@ export default function Layout() {
           <span className="text-red-400">■</span> ExtractCert
         </div>
         <nav className="mt-2 flex-1 space-y-1 px-3">
-          {items.map((it) => (
+          {items.filter((it) => it.to !== '/contactos').map((it) => (
             <NavLink
               key={it.to}
               to={it.to}

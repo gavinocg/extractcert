@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAuth } from '../store/auth'
 import { useToast } from '../store/toast'
+import Contactos from './Contactos'
 
 interface SmtpSettings {
   host: string
@@ -17,7 +18,7 @@ export default function Config() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const toast = useToast((state) => state.show)
-  const [tab, setTab] = useState<'general' | 'smtp'>('general')
+  const [tab, setTab] = useState<'general' | 'smtp' | 'contactos'>('general')
   const [raizOrigen, setRaizOrigen] = useState('')
   const [raizRepo, setRaizRepo] = useState('')
   const [smtp, setSmtp] = useState<SmtpSettings>({ host: '', port: 587, user: '', tls: true, from_email: '', password_configured: false })
@@ -92,11 +93,12 @@ export default function Config() {
   return (
     <div className="max-w-3xl">
       <h1 className="mb-1 text-2xl font-bold text-slate-800">Configuración</h1>
-      <p className="mb-5 text-sm text-slate-500">Parámetros generales y servicio de correo.</p>
+      <p className="mb-5 text-sm text-slate-500">Parámetros generales, servicio de correo y contactos.</p>
 
       <div className="mb-4 flex w-fit rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
         <button onClick={() => setTab('general')} className={`rounded-lg px-4 py-2 text-sm font-semibold ${tab === 'general' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>General</button>
         <button onClick={() => setTab('smtp')} className={`rounded-lg px-4 py-2 text-sm font-semibold ${tab === 'smtp' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>SMTP</button>
+        <button onClick={() => setTab('contactos')} className={`rounded-lg px-4 py-2 text-sm font-semibold ${tab === 'contactos' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>Contactos</button>
       </div>
 
       {tab === 'general' ? (
@@ -105,7 +107,7 @@ export default function Config() {
           <div><label className="mb-1 block text-sm font-medium text-slate-700">Directorio de destino (repo)</label><input value={raizRepo} onChange={(event) => setRaizRepo(event.target.value)} required className={`${fieldClass} font-mono text-sm`} /></div>
           <button className="rounded-lg bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700">Guardar</button>
         </form>
-      ) : (
+      ) : tab === 'smtp' ? (
         <form onSubmit={saveSmtp} className="space-y-5 rounded-xl bg-white p-5 shadow-sm">
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">Estos datos se utilizarán para las notificaciones de asignación y finalización de lotes.</div>
           <div className="grid gap-4 sm:grid-cols-[1fr_140px]">
@@ -126,7 +128,7 @@ export default function Config() {
           </div>
           <button className="rounded-lg bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700">Guardar SMTP</button>
         </form>
-      )}
+      ) : <Contactos />}
     </div>
   )
 }

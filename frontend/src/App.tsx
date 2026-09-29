@@ -71,7 +71,7 @@ function RouteLoader() {
           <Route path="visor" element={<Visor />} />
           <Route path="historial" element={<Historial />} />
           <Route path="errores" element={<Errores />} />
-          <Route path="contactos" element={<RoleGate allow={['supervisor', 'administrador']}><Contactos /></RoleGate>} />
+          <Route path="contactos" element={<RoleGate allow={['administrador']}><Contactos /></RoleGate>} />
           <Route path="observaciones" element={<RoleGate allow={['administrador']}><Observaciones /></RoleGate>} />
           <Route path="usuarios" element={<RoleGate allow={['administrador']}><Usuarios /></RoleGate>} />
           <Route path="config" element={<RoleGate allow={['administrador']}><Config /></RoleGate>} />

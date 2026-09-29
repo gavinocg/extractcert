@@ -109,6 +109,32 @@ def test_admin_reset_y_forzado_expulsan_sesiones():
     assert target.token_version == 4 and target.must_change_password
 
 
+def test_admin_puede_solicitar_cambio_repetidamente():
+    db = database()
+    admin = user(db, "admin", "Clave-admin-2026", rol="administrador")
+    target = user(db, "target", "Clave-target-2026", must_change_password=True)
+
+    usuarios.forzar_cambio_password(target.id, request(), admin, db, None)
+    usuarios.forzar_cambio_password(target.id, request(), admin, db, None)
+
+    assert target.must_change_password
+    assert target.token_version == 3
+    assert db.query(SecurityAudit).filter_by(evento="force_password_change").count() == 2
+
+
+@pytest.mark.parametrize("password", ["1", "password123", "x" * 100])
+def test_admin_puede_establecer_password_sin_politica_de_complejidad(password):
+    db = database()
+    admin = user(db, "admin", "Clave-admin-2026", rol="administrador")
+    target = user(db, "target", "Clave-target-2026")
+    body = usuarios.UsuarioIn(username="target", password=password, must_change_password=True)
+
+    usuarios.actualizar(target.id, body, request(), admin, db, None)
+
+    assert security.verify_password(password, target.password_hash)
+    assert target.must_change_password
+
+
 def test_modelos_contienen_campos_y_auditoria():
     db = database()
     columns = {column["name"] for column in inspect(db.bind).get_columns("users")}

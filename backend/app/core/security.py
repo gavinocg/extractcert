@@ -1,5 +1,6 @@
 """Seguridad: hash de contraseñas (bcrypt) y tokens JWT."""
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 
 import bcrypt
 import jwt
@@ -18,13 +19,16 @@ COMMON_PASSWORDS = {
 
 
 def hash_password(plain: str) -> str:
-    if len(plain.encode("utf-8")) > 72:
-        raise ValueError("La contraseña no puede superar 72 bytes.")
-    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    encoded = plain.encode("utf-8")
+    if len(encoded) > 72:
+        return "$sha256$" + bcrypt.hashpw(sha256(encoded).digest(), bcrypt.gensalt()).decode("utf-8")
+    return bcrypt.hashpw(encoded, bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     try:
+        if hashed.startswith("$sha256$"):
+            return bcrypt.checkpw(sha256(plain.encode("utf-8")).digest(), hashed.removeprefix("$sha256$").encode("utf-8"))
         return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
     except ValueError:
         return False

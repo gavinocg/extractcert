@@ -96,10 +96,6 @@ def crear(
     if email and db.query(User).filter(User.email == email).first():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "El correo ya está registrado.")
 
-    try:
-        security.validate_password(body.password, username)
-    except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     u = User(
         username=username,
         nombre=body.nombre.strip(),
@@ -158,10 +154,6 @@ def actualizar(
     password_changed = bool(body.password)
     obligation_changed = body.must_change_password is not None and body.must_change_password != u.must_change_password
     if body.password:
-        try:
-            security.validate_password(body.password, username, u.password_hash)
-        except ValueError as exc:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
         u.password_hash = security.hash_password(body.password)
         u.password_changed_at = datetime.now()
     if body.must_change_password is not None:
@@ -177,6 +169,24 @@ def actualizar(
         raise HTTPException(status.HTTP_409_CONFLICT, "El usuario o correo ya está registrado.")
     if audit_event:
         record(db, audit_event, u.id, user.id, request.client.host if request.client else None)
+    return {"ok": True}
+
+
+@router.post("/{user_id}/forzar-cambio-password")
+def forzar_cambio_password(
+    user_id: int,
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_csrf),
+):
+    target = db.get(User, user_id)
+    if not target:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuario no existe.")
+    target.must_change_password = True
+    target.token_version += 1
+    db.commit()
+    record(db, "force_password_change", target.id, user.id, request.client.host if request.client else None)
     return {"ok": True}
 
 

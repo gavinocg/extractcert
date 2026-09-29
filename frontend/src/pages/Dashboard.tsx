@@ -339,7 +339,7 @@ export default function Dashboard() {
                     <tr className="text-left text-xs text-slate-400">
                       <th className="px-2 py-1">Archivo</th>
                       <th className="hidden px-2 py-1 sm:table-cell">Nombre</th>
-                      <th className="hidden px-2 py-1 sm:table-cell">Fecha</th>
+                      <th className="px-2 py-1">Fecha</th>
                       <th className="px-2 py-1">Acción</th>
                     </tr>
                   </thead>
@@ -363,7 +363,7 @@ export default function Dashboard() {
                             </span>
                           </td>
                           <td className="hidden whitespace-nowrap px-2 py-1.5 text-slate-600 sm:table-cell">{usuario}</td>
-                          <td className="hidden whitespace-nowrap px-2 py-1.5 text-slate-600 sm:table-cell">{formatoFecha(it.fecha)}</td>
+                          <td className="whitespace-nowrap px-2 py-1.5 text-slate-600">{formatoFecha(it.fecha)}</td>
                           <td className="px-2 py-1.5">
                             <span className="flex shrink-0 items-center gap-1">
                               {activeLease ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">En uso por {reservedBy}</span> : <span className="hidden rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 sm:inline-flex">Disponible</span>}

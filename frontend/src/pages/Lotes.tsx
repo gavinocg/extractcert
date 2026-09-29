@@ -192,7 +192,10 @@ export default function Lotes({ supervisionView = false }: { supervisionView?: b
                       </span>
                     </td>
                     <td className="px-4 py-3"><ProgressBar metricas={lote.metricas} /></td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">{dateLabel(lote.assigned_at)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">
+                      {lote.asignado_por && <div className="font-semibold text-slate-700">{lote.asignado_por.nombre || lote.asignado_por.username}</div>}
+                      <div className="text-slate-500">{dateLabel(lote.assigned_at)}</div>
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-2">
                         <Link to={`/lote?path=${encodeURIComponent(lote.relative_path)}`} className="whitespace-nowrap rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">Abrir</Link>

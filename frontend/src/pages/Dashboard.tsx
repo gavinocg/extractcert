@@ -376,7 +376,7 @@ export default function Dashboard() {
                               {pendiente && !hasError ? (
                                 <button disabled={claiming === it.documento_id} onClick={() => void claimAndOpen(it, 'extract')} className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-40">Extraer</button>
                               ) : !hasError ? (
-                                <button disabled={claiming === it.documento_id} onClick={() => void claimAndOpen(it, 'extract')} aria-label="Crear nueva versión" title="Crear nueva versión" className="rounded border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-40"><span className="text-base sm:hidden">♻</span><span className="hidden sm:inline">Crear nueva versión</span></button>
+                                <button disabled={claiming === it.documento_id} onClick={() => void claimAndOpen(it, 'extract')} aria-label="Reprocesar archivo" title="Reprocesar / crear nueva versión" className="rounded border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-40"><span className="text-xl leading-none sm:hidden">↻</span><span className="hidden sm:inline">Crear nueva versión</span></button>
                               ) : null}
                             </span>
                           </td>

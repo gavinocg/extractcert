@@ -29,6 +29,7 @@ export default function Usuarios() {
   const [estado, setEstado] = useState('activo')
   const [password, setPassword] = useState('')
   const [mustChangePassword, setMustChangePassword] = useState(true)
+  const [forcingPassword, setForcingPassword] = useState(0)
 
   useEffect(() => {
     if (user?.rol !== 'administrador') {
@@ -94,6 +95,21 @@ export default function Usuarios() {
       await cargar()
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Error', 'error')
+    }
+  }
+
+  const solicitarCambioPassword = async (u: Usuario) => {
+    if (!confirm(`¿Solicitar a ${u.username} que cambie su contraseña en el próximo inicio de sesión?`)) return
+    setForcingPassword(u.id)
+    try {
+      await api.post(`/api/usuarios/${u.id}/forzar-cambio-password`, {})
+      toast('Cambio de contraseña solicitado', 'success')
+      await cargar()
+      if (u.id === user?.id) await reloadAuth()
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'No se pudo solicitar el cambio', 'error')
+    } finally {
+      setForcingPassword(0)
     }
   }
 
@@ -240,6 +256,13 @@ export default function Usuarios() {
                       </span>
                     </td>
                     <td className="px-2 py-2 text-right">
+                      <button
+                        onClick={() => void solicitarCambioPassword(u)}
+                        disabled={forcingPassword === u.id}
+                        className="mr-2 rounded border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                      >
+                        {forcingPassword === u.id ? 'Solicitando…' : 'Solicitar cambio'}
+                      </button>
                       <button onClick={() => abrir(u)} className="mr-2 rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">
                         Editar
                       </button>

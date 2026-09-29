@@ -157,18 +157,18 @@ export default function ExtraerModal({ ruta, documentoId, leaseToken, ini = 0, f
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2">
-      <div className="flex h-[96vh] w-[96vw] max-w-[1600px] flex-col overflow-hidden rounded-xl bg-white shadow-xl">
-        <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-0 sm:p-2">
+      <div className="flex h-[100dvh] w-full max-w-[1600px] flex-col overflow-hidden bg-white shadow-xl sm:h-[96vh] sm:w-[96vw] sm:rounded-xl">
+        <div className="flex items-start justify-between gap-2 border-b border-slate-200 px-3 py-2 sm:gap-3 sm:px-5 sm:py-3">
           <div className="min-w-0">
-            <h2 title={isPreview ? prev?.nombre : nombre} className="flex items-center gap-2 truncate text-red-500"><span>▨</span> <span className="truncate text-[18px] font-bold text-slate-900">Archivo: {isPreview ? prev?.nombre : nombre}</span></h2>
+            <h2 title={isPreview ? prev?.nombre : nombre} className="flex items-center gap-2 truncate text-red-500"><span>▨</span> <span className="truncate text-base font-bold text-slate-900 sm:text-[18px]"><span className="hidden sm:inline">Archivo: </span>{isPreview ? prev?.nombre : nombre}</span></h2>
             <p className="truncate font-mono text-xs text-slate-400">{isPreview ? `Vista previa del archivo final · Páginas ${pred.inicio}–${pred.fin} (${prev?.paginas})` : ruta}</p>
           </div>
           <div className="flex shrink-0 gap-2">
             {!isPreview && (
-              <button onClick={() => setAyuda((v) => !v)} className={`rounded-lg border px-3 py-2 text-sm hover:bg-slate-100 ${ayuda ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-300'}`}>{ayuda ? 'Ocultar ayuda' : 'Ayuda'}</button>
+              <button onClick={() => setAyuda((v) => !v)} aria-label={ayuda ? 'Ocultar ayuda' : 'Mostrar ayuda'} title={ayuda ? 'Ocultar ayuda' : 'Ayuda'} className={`min-h-11 min-w-11 rounded-lg border px-3 py-2 text-sm hover:bg-slate-100 ${ayuda ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-300'}`}><span className="sm:hidden">?</span><span className="hidden sm:inline">{ayuda ? 'Ocultar ayuda' : 'Ayuda'}</span></button>
             )}
-            <button onClick={intentarCerrar} className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">✕</button>
+            <button onClick={intentarCerrar} aria-label="Cerrar" title="Cerrar" className="min-h-11 min-w-11 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">✕</button>
           </div>
         </div>
 
@@ -182,37 +182,37 @@ export default function ExtraerModal({ ruta, documentoId, leaseToken, ini = 0, f
 
         {!isPreview ? (
           <>
-            <div className="mx-5 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3">
-              <div className="text-sm text-slate-700"><span className="font-semibold">Selección</span> · Inicio: <b>{pred.inicio || '—'}</b> · Fin: <b>{pred.fin || '—'}</b></div>
+            <div className="mx-2 mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-2 py-2 sm:mx-5 sm:mt-3 sm:gap-3 sm:px-4 sm:py-3">
+              <div className="text-xs text-slate-700 sm:text-sm"><span className="hidden font-semibold sm:inline">Selección · </span>I: <b>{pred.inicio || '—'}</b> · F: <b>{pred.fin || '—'}</b></div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setShowErrorModal(true)}
                   className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${errorLocal ? 'border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100' : 'border border-red-300 bg-white text-red-600 hover:bg-red-50'}`}
                 >
-                  <span className="text-base leading-none">⚠</span> {errorLocal ? 'Ver error' : 'Error en PDF'}
+                   <span className="text-base leading-none">⚠</span><span className="hidden sm:inline"> {errorLocal ? 'Ver error' : 'Error en PDF'}</span>
                 </button>
-                <button onClick={previsualizar} disabled={!seleccionValida || busyPre} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">{busyPre ? 'Preparando…' : 'Previsualizar y Extraer'}</button>
+                <button onClick={previsualizar} disabled={!seleccionValida || busyPre} aria-label="Previsualizar y extraer" title="Previsualizar y extraer" className="min-h-11 min-w-11 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"><span className="sm:hidden">⌕</span><span className="hidden sm:inline">{busyPre ? 'Preparando…' : 'Previsualizar y Extraer'}</span></button>
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-hidden p-3">
               <PdfViewer ref={viewerRef} key={original} seleccion fit={false} url={original} ini={ini} fin={fin} onSeleccion={setPred} onError={(m) => toast(m, 'error')} zoomRueda />
             </div>
             <div className="flex justify-end border-t border-slate-200 px-5 py-3">
-              <button onClick={intentarCerrar} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">Cerrar</button>
+              <button onClick={intentarCerrar} aria-label="Cerrar" className="min-h-11 min-w-11 rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"><span className="sm:hidden">✕</span><span className="hidden sm:inline">Cerrar</span></button>
             </div>
           </>
         ) : (
           <>
-            <div className="mx-5 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3">
-              <button onClick={() => setPrev(null)} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-100">← Volver al original</button>
+            <div className="mx-2 mt-2 flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-2 py-2 sm:mx-5 sm:mt-3 sm:gap-3 sm:px-4 sm:py-3">
+              <button onClick={() => setPrev(null)} aria-label="Volver al original" title="Volver al original" className="min-h-11 min-w-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-100"><span className="sm:hidden">↩</span><span className="hidden sm:inline">← Volver al original</span></button>
               <div className="flex items-center gap-2">
                 {!reextra && (
-                  <button onClick={abrirGuardarComo} disabled={busyGuardar} className="rounded-lg border border-emerald-600 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">Guardar como</button>
+                  <button onClick={abrirGuardarComo} disabled={busyGuardar} aria-label="Guardar como" title="Guardar como" className="min-h-11 min-w-11 rounded-lg border border-emerald-600 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"><span className="sm:hidden">▣+</span><span className="hidden sm:inline">Guardar como</span></button>
                 )}
-                <button onClick={() => guardar()} disabled={busyGuardar} className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">{busyGuardar ? 'Guardando…' : 'Guardar Archivo'}</button>
+                <button onClick={() => guardar()} disabled={busyGuardar} aria-label="Guardar archivo" title="Guardar archivo" className="min-h-11 min-w-11 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"><span className="sm:hidden">▣</span><span className="hidden sm:inline">{busyGuardar ? 'Guardando…' : 'Guardar Archivo'}</span></button>
               </div>
             </div>
-            <div className="flex-1 overflow-auto p-3">
+            <div className="min-h-0 flex-1 overflow-hidden p-1 sm:p-3">
               <PdfViewer seleccion={false} fit vertical url={prevUrl} onError={(m) => toast(m, 'error')} zoomCtrl />
             </div>
           </>

@@ -65,6 +65,7 @@ const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
   const [paniendo, setPaniendo] = useState(false)
   const panRef = useRef({ activo: false, x: 0, y: 0, left: 0, top: 0 })
   const [mobileGestures, setMobileGestures] = useState(false)
+  const [showGestureHint, setShowGestureHint] = useState(false)
   const touchPointsRef = useRef(new Map<number, { x: number; y: number }>())
   const pinchRef = useRef({ distance: 0, zoom: 75 })
 
@@ -324,12 +325,19 @@ const handleDragEnd = useCallback(() => {
 
   useEffect(() => {
     if (!zoomCtrl) { setMobileGestures(false); return }
-    const media = window.matchMedia('(max-width: 1024px)')
+    const media = window.matchMedia('(max-width: 767px)')
     const update = () => setMobileGestures(media.matches && (navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches))
     update()
     media.addEventListener('change', update)
     return () => media.removeEventListener('change', update)
   }, [zoomCtrl])
+
+  useEffect(() => {
+    if (!mobileGestures) { setShowGestureHint(false); return }
+    setShowGestureHint(true)
+    const timer = window.setTimeout(() => setShowGestureHint(false), 3000)
+    return () => window.clearTimeout(timer)
+  }, [mobileGestures, url])
 
   const finPan = useCallback(() => {
     panRef.current.activo = false
@@ -341,6 +349,7 @@ const handleDragEnd = useCallback(() => {
       const el = wrapRef.current
       if (!el) return
       if (mobileGestures && e.pointerType === 'touch') {
+        setShowGestureHint(false)
         e.currentTarget.setPointerCapture(e.pointerId)
         touchPointsRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
         const points = [...touchPointsRef.current.values()]
@@ -499,9 +508,9 @@ const handleDragEnd = useCallback(() => {
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl bg-white shadow-sm">
-      <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
-        <button onClick={rotateLeft} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100" title="Girar izquierda">↺</button>
-        <button onClick={rotateRight} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100" title="Girar derecha">↻</button>
+      <div className="flex items-center gap-1 border-b border-slate-200 px-1.5 py-1.5 sm:gap-2 sm:px-3 sm:py-2">
+        <button onClick={rotateLeft} className="min-h-10 min-w-10 rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 sm:min-h-0 sm:min-w-0" title="Girar izquierda" aria-label="Girar izquierda">↺</button>
+        <button onClick={rotateRight} className="min-h-10 min-w-10 rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 sm:min-h-0 sm:min-w-0" title="Girar derecha" aria-label="Girar derecha">↻</button>
         <div className="h-4 w-px bg-slate-200" />
         <button
           onClick={() => ver(page - 1)}
@@ -531,8 +540,9 @@ const handleDragEnd = useCallback(() => {
             ))}
           </div>
         ) : (
-          <span className="flex-1 text-center text-xs text-slate-500">
-            Página {numPages ? page : '…'} de {numPages || '…'}
+          <span className="flex-1 whitespace-nowrap text-center text-xs text-slate-500">
+            <span className="sm:hidden">{numPages ? page : '…'}/{numPages || '…'}</span>
+            <span className="hidden sm:inline">Página {numPages ? page : '…'} de {numPages || '…'}</span>
           </span>
         )}
 
@@ -543,7 +553,7 @@ const handleDragEnd = useCallback(() => {
         >
           ›
         </button>
-        {mobileGestures && <><div className="h-4 w-px bg-slate-200" /><button onClick={() => setZoom((value) => Math.max(25, value - 25))} className="rounded border border-slate-300 px-2.5 py-1 text-xs font-bold" aria-label="Alejar">−</button><span className="min-w-12 text-center text-[11px] font-semibold text-slate-500">{zoom}%</span><button onClick={() => setZoom((value) => Math.min(MOBILE_MAX_ZOOM, value + 25))} className="rounded border border-slate-300 px-2.5 py-1 text-xs font-bold" aria-label="Acercar">+</button></>}
+        {mobileGestures && <><div className="h-4 w-px bg-slate-200" /><button onClick={() => setZoom((value) => Math.max(25, value - 25))} className="min-h-10 min-w-10 rounded border border-slate-300 px-2 py-1 text-xs font-bold" aria-label="Alejar">−</button><span className="min-w-11 text-center text-[11px] font-semibold text-slate-500">{zoom}%</span><button onClick={() => setZoom((value) => Math.min(MOBILE_MAX_ZOOM, value + 25))} className="min-h-10 min-w-10 rounded border border-slate-300 px-2 py-1 text-xs font-bold" aria-label="Acercar">+</button></>}
       </div>
 
       <div
@@ -556,13 +566,13 @@ const handleDragEnd = useCallback(() => {
         className={`relative flex-1 overflow-auto p-2 ${gestoRueda ? (paniendo ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
         style={{ minHeight: 360, touchAction: mobileGestures ? 'none' : 'auto' }}
       >
-        {mobileGestures && !cargando && <div className="pointer-events-none sticky left-1/2 top-2 z-10 w-fit -translate-x-1/2 rounded-full bg-slate-900/75 px-3 py-1 text-[11px] font-medium text-white shadow">Pellizca para zoom · Arrastra para mover</div>}
+        {showGestureHint && !cargando && <div className="pointer-events-none sticky left-1/2 top-2 z-10 w-fit -translate-x-1/2 rounded-full bg-slate-900/75 px-3 py-1 text-[11px] font-medium text-white shadow">Pellizca · Arrastra</div>}
         {cargando ? (
           <div className="flex h-full min-h-[300px] items-center justify-center text-slate-400">
             Cargando PDF…
           </div>
         ) : vertical ? (
-          <div className="flex flex-col items-center gap-4">
+          <div className={mobileGestures ? 'pdf-mobile-track flex flex-col gap-4' : 'flex flex-col items-center gap-4'}>
             {Array.from({ length: numPages }, (_, i) => i + 1).map((n) => (
               <canvas
                 key={n}
@@ -570,7 +580,7 @@ const handleDragEnd = useCallback(() => {
                   if (el) canvasMapRef.current.set(n, el)
                   else canvasMapRef.current.delete(n)
                 }}
-                className={`${zoomCtrl ? '' : 'max-w-full'} shadow-sm`}
+                className={`${mobileGestures ? 'pdf-mobile-preview' : zoomCtrl ? '' : 'max-w-full'} shadow-sm`}
               />
             ))}
           </div>

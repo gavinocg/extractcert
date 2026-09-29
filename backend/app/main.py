@@ -2,7 +2,8 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .core.config import settings
@@ -83,7 +84,19 @@ app.include_router(errores.router, dependencies=full_access)
 app.include_router(contactos.router, dependencies=full_access)
 app.include_router(observaciones.router, dependencies=full_access)
 
-# En producción, servir el build de Vite (frontend/dist).
+# En producción, servir assets y aplicar fallback SPA para rutas de React.
 _DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 if _DIST.is_dir():
-    app.mount("/", StaticFiles(directory=str(_DIST), html=True), name="spa")
+    for directory in ("assets", "pdfjs-wasm"):
+        path = _DIST / directory
+        if path.is_dir():
+            app.mount(f"/{directory}", StaticFiles(directory=str(path)), name=f"spa-{directory}")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa_fallback(full_path: str):
+        if full_path.startswith("api/"):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Endpoint no encontrado.")
+        candidate = (_DIST / full_path).resolve()
+        if candidate.is_file() and _DIST.resolve() in candidate.parents:
+            return FileResponse(candidate)
+        return FileResponse(_DIST / "index.html")

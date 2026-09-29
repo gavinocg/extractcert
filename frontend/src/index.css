@@ -16,6 +16,19 @@ iframe {
 }
 
 @media (max-width: 767px) {
+  .pdf-mobile-preview {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: none !important;
+    margin-inline: auto;
+  }
+
+  .pdf-mobile-track {
+    width: max-content;
+    min-width: 100%;
+  }
+
   table {
     display: block;
     width: max-content;

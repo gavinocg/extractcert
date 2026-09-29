@@ -39,6 +39,7 @@ export default function ExtraerModal({ ruta, documentoId, leaseToken, ini = 0, f
   const [showErrorModal, setShowErrorModal] = useState(false)
   const [errorLocal, setErrorLocal] = useState(error ?? null)
   const viewerRef = useRef<PdfViewerHandle>(null)
+  const [originalZoom, setOriginalZoom] = useState(75)
   const leaseActive = useRef(true)
   const releaseTimer = useRef<number | null>(null)
   const idempotencyKey = useRef(crypto.randomUUID())
@@ -195,10 +196,11 @@ export default function ExtraerModal({ ruta, documentoId, leaseToken, ini = 0, f
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-hidden p-3">
-              <PdfViewer ref={viewerRef} key={original} seleccion fit={false} url={original} ini={ini} fin={fin} onSeleccion={setPred} onError={(m) => toast(m, 'error')} zoomRueda mobileTouch mobileRotationGesture />
+              <PdfViewer ref={viewerRef} key={original} seleccion fit={false} url={original} ini={ini} fin={fin} onSeleccion={setPred} onError={(m) => toast(m, 'error')} zoomRueda mobileTouch mobileRotationGesture hideMobileZoomControls onZoomChange={setOriginalZoom} />
             </div>
-            <div className="flex justify-end border-t border-slate-200 px-5 py-3">
-              <button onClick={intentarCerrar} aria-label="Cerrar" className="min-h-11 min-w-11 rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"><span className="sm:hidden">✕</span><span className="hidden sm:inline">Cerrar</span></button>
+            <div className="flex justify-center border-t border-slate-200 px-3 py-2 sm:justify-end sm:px-5 sm:py-3">
+              <div className="flex items-center gap-2 sm:hidden"><button type="button" onClick={() => viewerRef.current?.zoomOut()} className="min-h-11 min-w-11 rounded-lg border border-slate-300 bg-white font-bold" aria-label="Alejar">−</button><span className="min-w-12 text-center text-xs font-semibold text-slate-600">{originalZoom}%</span><button type="button" onClick={() => viewerRef.current?.zoomIn()} className="min-h-11 min-w-11 rounded-lg border border-slate-300 bg-white font-bold" aria-label="Acercar">+</button></div>
+              <button onClick={intentarCerrar} aria-label="Cerrar" className="hidden rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100 sm:inline-flex">Cerrar</button>
             </div>
           </>
         ) : (

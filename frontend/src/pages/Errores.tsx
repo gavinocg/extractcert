@@ -11,6 +11,7 @@ export default function Errores() {
   const [pagina, setPagina] = useState(1)
   const [sel, setSel] = useState<number[]>([])
   const [showEnviar, setShowEnviar] = useState(false)
+  const [sendAll, setSendAll] = useState(false)
   const toast = useToast((s) => s.show)
   const requestGeneration = useRef(0)
   const loadController = useRef<AbortController | null>(null)
@@ -62,7 +63,8 @@ export default function Errores() {
       <p className="mb-4 text-sm text-slate-500">Listado de números de trámite (archivo con extensión) y observaciones.</p>
       <div className="mb-3 flex items-center gap-2 text-sm">
         <label className="flex items-center gap-1"><input type="checkbox" checked={all} onChange={() => setSel(all ? [] : regs.map((r) => r.id))} /> Seleccionar pág</label>
-        <button onClick={() => setShowEnviar(true)} disabled={sel.length === 0} className="rounded bg-amber-600 px-3 py-1 text-white disabled:opacity-40">Enviar ({sel.length})</button>
+        <button onClick={() => { setSendAll(false); setShowEnviar(true) }} disabled={sel.length === 0} className="rounded bg-amber-600 px-3 py-1 text-white disabled:opacity-40">Enviar ({sel.length})</button>
+        <button onClick={() => { setSendAll(true); setShowEnviar(true) }} disabled={total === 0} className="rounded bg-slate-800 px-3 py-1 text-white hover:bg-slate-700 disabled:opacity-40">Enviar todos ({total})</button>
         <span className="ml-auto text-xs text-slate-400">{total} total</span>
       </div>
       <div className="overflow-auto rounded-xl bg-white shadow-sm">
@@ -87,7 +89,7 @@ export default function Errores() {
         <span className="text-xs text-slate-400">Pág {pagina} · {total} total</span>
         <button onClick={() => cargar(pagina + 1)} disabled={pagina * 20 >= total} aria-label="Página siguiente" className="min-h-11 min-w-11 rounded border px-3 py-1 disabled:opacity-40 sm:min-h-0 sm:min-w-0"><span className="sm:hidden">›</span><span className="hidden sm:inline">Siguiente ›</span></button>
       </div>
-      {showEnviar && <EnviarErroresModal ids={sel} onClose={() => setShowEnviar(false)} onSent={() => { setShowEnviar(false); toast('Enviado', 'success'); void cargar(pagina) }} />}
+      {showEnviar && <EnviarErroresModal ids={sendAll ? [] : sel} todos={sendAll} count={sendAll ? total : sel.length} onClose={() => setShowEnviar(false)} onSent={() => { setShowEnviar(false); toast('Enviado', 'success'); void cargar(pagina) }} />}
     </div>
   )
 }

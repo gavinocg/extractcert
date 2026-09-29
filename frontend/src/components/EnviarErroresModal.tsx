@@ -4,11 +4,13 @@ import { api } from '../api/client'
 interface Contacto { id: number; nombre: string; email: string }
 interface Props {
   ids: number[]
+  todos?: boolean
+  count?: number
   onClose: () => void
   onSent: () => void
 }
 
-export default function EnviarErroresModal({ ids, onClose, onSent }: Props) {
+export default function EnviarErroresModal({ ids, todos = false, count, onClose, onSent }: Props) {
   const [contactos, setContactos] = useState<Contacto[]>([])
   const [sel, setSel] = useState<number[]>([])
   const [extra, setExtra] = useState('')
@@ -23,12 +25,12 @@ export default function EnviarErroresModal({ ids, onClose, onSent }: Props) {
   const toggle = (id: number) => setSel((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
 
   const enviar = async () => {
-    if (ids.length === 0) { setErr('Sin trámites seleccionados'); return }
+    if (!todos && ids.length === 0) { setErr('Sin trámites seleccionados'); return }
     if (sel.length === 0 && !extra.trim()) { setErr('Seleccione contactos o indique emails'); return }
     setBusy(true); setErr(''); setOk('')
     try {
       const emails_extra = extra.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean)
-      await api.post('/api/errores/enviar', { ids, contactos_ids: sel, emails_extra, asunto, cuerpo })
+      await api.post('/api/errores/enviar', { ids, todos, contactos_ids: sel, emails_extra, asunto, cuerpo })
       setOk('Correos enviados')
       setTimeout(onSent, 800)
     } catch (e) { setErr(e instanceof Error ? e.message : 'Error') } finally { setBusy(false) }
@@ -37,7 +39,7 @@ export default function EnviarErroresModal({ ids, onClose, onSent }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-xl bg-white p-5 shadow-xl">
-        <h3 className="text-base font-semibold text-slate-800">Enviar trámites con error ({ids.length})</h3>
+        <h3 className="text-base font-semibold text-slate-800">Enviar trámites con error ({count ?? ids.length})</h3>
         <div className="mt-4">
           <div className="text-sm font-medium text-slate-700">Contactos (libreta global)</div>
           <div className="mt-2 max-h-40 overflow-auto rounded-lg border border-slate-200 p-2">

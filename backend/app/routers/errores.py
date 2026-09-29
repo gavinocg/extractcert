@@ -25,6 +25,7 @@ class ErrorIn(BaseModel):
 
 class EnviarIn(BaseModel):
     ids: list[int] = []
+    todos: bool = False
     contactos_ids: list[int] = []
     emails_extra: list[str] = []
     asunto: str = ""
@@ -126,14 +127,21 @@ def eliminar(eid: int, lease_token: str = Query(...), user: User = Depends(get_c
 
 @router.post("/enviar")
 def enviar(body: EnviarIn, user: User = Depends(get_current_user), db: Session = Depends(get_db), _: None = Depends(require_csrf)):
-    if not body.ids:
+    if not body.todos and not body.ids:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Seleccione al menos un trámite.")
-    errores = db.query(TramiteError).filter(TramiteError.id.in_(body.ids)).all()
+    query = db.query(TramiteError)
+    if body.todos:
+        if user.rol == "usuario":
+            assigned = db.query(LoteOperador.lote_id).filter(LoteOperador.operador_id == user.id, LoteOperador.activo.is_(True))
+            query = query.filter(TramiteError.lote_id.in_(assigned))
+    else:
+        query = query.filter(TramiteError.id.in_(body.ids))
+    errores = query.all()
     if not errores:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Trámites no encontrados.")
     # Supervisor y Administrador gestionan el reporte consolidado de todos los
     # lotes. Los operadores conservan el aislamiento por membresía.
-    if user.rol == "usuario":
+    if user.rol == "usuario" and not body.todos:
         for item in errores:
             require_path_access(db, user, item.original_path)
     destinatarios: list[str] = []

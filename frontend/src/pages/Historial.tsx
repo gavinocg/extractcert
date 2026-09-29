@@ -143,9 +143,10 @@ export default function Historial() {
                 <button
                   onClick={() => irA(data.pagina - 1)}
                   disabled={data.pagina <= 1}
-                  className="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100 disabled:opacity-40"
+                  aria-label="Página anterior"
+                  className="min-h-11 min-w-11 rounded border border-slate-300 px-3 py-1 hover:bg-slate-100 disabled:opacity-40 sm:min-h-0 sm:min-w-0"
                 >
-                  ‹ Anterior
+                  <span className="sm:hidden">‹</span><span className="hidden sm:inline">‹ Anterior</span>
                 </button>
                 <span className="text-xs text-slate-500">
                   Página {data.pagina} / {totalPaginas}
@@ -153,9 +154,10 @@ export default function Historial() {
                 <button
                   onClick={() => irA(data.pagina + 1)}
                   disabled={data.pagina >= totalPaginas}
-                  className="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100 disabled:opacity-40"
+                  aria-label="Página siguiente"
+                  className="min-h-11 min-w-11 rounded border border-slate-300 px-3 py-1 hover:bg-slate-100 disabled:opacity-40 sm:min-h-0 sm:min-w-0"
                 >
-                  Siguiente ›
+                  <span className="sm:hidden">›</span><span className="hidden sm:inline">Siguiente ›</span>
                 </button>
               </div>
             </div>

@@ -338,8 +338,8 @@ export default function Dashboard() {
                   <thead>
                     <tr className="text-left text-xs text-slate-400">
                       <th className="px-2 py-1">Archivo</th>
-                      <th className="px-2 py-1">Nombre</th>
-                      <th className="px-2 py-1">Fecha</th>
+                      <th className="hidden px-2 py-1 sm:table-cell">Nombre</th>
+                      <th className="hidden px-2 py-1 sm:table-cell">Fecha</th>
                       <th className="px-2 py-1">Acción</th>
                     </tr>
                   </thead>
@@ -362,11 +362,11 @@ export default function Dashboard() {
                               {hasError ? <span className="shrink-0 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700">Error en digital</span> : !pendiente && <span className="shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">{it.estado === 'rehecho' ? 're-extraído' : 'realizado'}</span>}
                             </span>
                           </td>
-                          <td className="whitespace-nowrap px-2 py-1.5 text-slate-600">{usuario}</td>
-                          <td className="whitespace-nowrap px-2 py-1.5 text-slate-600">{formatoFecha(it.fecha)}</td>
+                          <td className="hidden whitespace-nowrap px-2 py-1.5 text-slate-600 sm:table-cell">{usuario}</td>
+                          <td className="hidden whitespace-nowrap px-2 py-1.5 text-slate-600 sm:table-cell">{formatoFecha(it.fecha)}</td>
                           <td className="px-2 py-1.5">
                             <span className="flex shrink-0 items-center gap-1">
-                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${activeLease ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{activeLease ? `En uso por ${reservedBy}` : 'Disponible'}</span>
+                              {activeLease ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">En uso por {reservedBy}</span> : <span className="hidden rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 sm:inline-flex">Disponible</span>}
                               {hasError && (
                                 <>
                                   <button disabled={claiming === it.documento_id} onClick={() => void claimAndOpen(it, 'error')} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-white disabled:opacity-40">Ver/modificar error</button>
@@ -376,7 +376,7 @@ export default function Dashboard() {
                               {pendiente && !hasError ? (
                                 <button disabled={claiming === it.documento_id} onClick={() => void claimAndOpen(it, 'extract')} className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-40">Extraer</button>
                               ) : !hasError ? (
-                                <button disabled={claiming === it.documento_id} onClick={() => void claimAndOpen(it, 'extract')} className="rounded border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-40">Crear nueva versión</button>
+                                <button disabled={claiming === it.documento_id} onClick={() => void claimAndOpen(it, 'extract')} aria-label="Crear nueva versión" title="Crear nueva versión" className="rounded border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-40"><span className="text-base sm:hidden">♻</span><span className="hidden sm:inline">Crear nueva versión</span></button>
                               ) : null}
                             </span>
                           </td>
@@ -395,8 +395,8 @@ export default function Dashboard() {
                       })()}
                     </span>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => void cargar(path, dash.pagina - 1)} disabled={dash.pagina <= 1} className="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100 disabled:opacity-40">‹ Anterior</button>
-                      <button onClick={() => void cargar(path, dash.pagina + 1)} disabled={dash.pagina * dash.tam >= dash.total} className="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100 disabled:opacity-40">Siguiente ›</button>
+                      <button onClick={() => void cargar(path, dash.pagina - 1)} disabled={dash.pagina <= 1} aria-label="Página anterior" className="min-h-11 min-w-11 rounded border border-slate-300 px-3 py-1 hover:bg-slate-100 disabled:opacity-40 sm:min-h-0 sm:min-w-0"><span className="sm:hidden">‹</span><span className="hidden sm:inline">‹ Anterior</span></button>
+                      <button onClick={() => void cargar(path, dash.pagina + 1)} disabled={dash.pagina * dash.tam >= dash.total} aria-label="Página siguiente" className="min-h-11 min-w-11 rounded border border-slate-300 px-3 py-1 hover:bg-slate-100 disabled:opacity-40 sm:min-h-0 sm:min-w-0"><span className="sm:hidden">›</span><span className="hidden sm:inline">Siguiente ›</span></button>
                     </div>
                   </div>
                 )}

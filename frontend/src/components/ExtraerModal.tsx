@@ -39,7 +39,9 @@ export default function ExtraerModal({ ruta, documentoId, leaseToken, ini = 0, f
   const [showErrorModal, setShowErrorModal] = useState(false)
   const [errorLocal, setErrorLocal] = useState(error ?? null)
   const viewerRef = useRef<PdfViewerHandle>(null)
+  const previewViewerRef = useRef<PdfViewerHandle>(null)
   const [originalZoom, setOriginalZoom] = useState(75)
+  const [previewZoom, setPreviewZoom] = useState(75)
   const leaseActive = useRef(true)
   const releaseTimer = useRef<number | null>(null)
   const idempotencyKey = useRef(crypto.randomUUID())
@@ -215,8 +217,9 @@ export default function ExtraerModal({ ruta, documentoId, leaseToken, ini = 0, f
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-hidden p-1 sm:p-3">
-              <PdfViewer seleccion={false} fit vertical url={prevUrl} onError={(m) => toast(m, 'error')} zoomCtrl />
+              <PdfViewer ref={previewViewerRef} seleccion={false} fit vertical url={prevUrl} onError={(m) => toast(m, 'error')} zoomCtrl hideMobileZoomControls onZoomChange={setPreviewZoom} />
             </div>
+            <div className="flex justify-center border-t border-slate-200 px-3 py-2 sm:hidden"><div className="flex items-center gap-2"><button type="button" onClick={() => previewViewerRef.current?.zoomOut()} className="min-h-11 min-w-11 rounded-lg border border-slate-300 bg-white font-bold" aria-label="Alejar">−</button><span className="min-w-12 text-center text-xs font-semibold text-slate-600">{previewZoom}%</span><button type="button" onClick={() => previewViewerRef.current?.zoomIn()} className="min-h-11 min-w-11 rounded-lg border border-slate-300 bg-white font-bold" aria-label="Acercar">+</button></div></div>
           </>
         )}
         {showErrorModal && <ErrorModal archivo={nombre} observacionInicial={errorLocal?.observacion ?? ''} onClose={() => setShowErrorModal(false)} onSave={guardarError} />}

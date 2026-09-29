@@ -83,9 +83,9 @@ export default function Errores() {
         </table>
       </div>
       <div className="mt-3 flex justify-between text-sm">
-        <button onClick={() => cargar(pagina - 1)} disabled={pagina <= 1} className="rounded border px-3 py-1 disabled:opacity-40">‹ Anterior</button>
+        <button onClick={() => cargar(pagina - 1)} disabled={pagina <= 1} aria-label="Página anterior" className="min-h-11 min-w-11 rounded border px-3 py-1 disabled:opacity-40 sm:min-h-0 sm:min-w-0"><span className="sm:hidden">‹</span><span className="hidden sm:inline">‹ Anterior</span></button>
         <span className="text-xs text-slate-400">Pág {pagina} · {total} total</span>
-        <button onClick={() => cargar(pagina + 1)} disabled={pagina * 20 >= total} className="rounded border px-3 py-1 disabled:opacity-40">Siguiente ›</button>
+        <button onClick={() => cargar(pagina + 1)} disabled={pagina * 20 >= total} aria-label="Página siguiente" className="min-h-11 min-w-11 rounded border px-3 py-1 disabled:opacity-40 sm:min-h-0 sm:min-w-0"><span className="sm:hidden">›</span><span className="hidden sm:inline">Siguiente ›</span></button>
       </div>
       {showEnviar && <EnviarErroresModal ids={sel} onClose={() => setShowEnviar(false)} onSent={() => { setShowEnviar(false); toast('Enviado', 'success'); void cargar(pagina) }} />}
     </div>

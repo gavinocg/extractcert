@@ -26,6 +26,13 @@ interface OperatorStats {
   promedio_diario_30_dias: number
 }
 
+type SupervisionSort = 'lote' | 'operador' | 'estado' | 'avance' | 'asignado'
+
+function lotDate(lote: Lote) {
+  const match = `${lote.nombre} ${lote.relative_path}`.match(/(?:^|\D)(\d{2})-(\d{2})-(\d{4})(?:\D|$)/)
+  return match ? Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1])) : Number.POSITIVE_INFINITY
+}
+
 export default function Lotes({ supervisionView = false }: { supervisionView?: boolean }) {
   const user = useAuth((state) => state.user)
   const toast = useToast((state) => state.show)
@@ -39,6 +46,9 @@ export default function Lotes({ supervisionView = false }: { supervisionView?: b
   const [newOperatorIds, setNewOperatorIds] = useState<number[]>([])
   const [operatorSearch, setOperatorSearch] = useState('')
   const [savingReassignment, setSavingReassignment] = useState(false)
+  const [supervisionPage, setSupervisionPage] = useState(1)
+  const [supervisionSort, setSupervisionSort] = useState<SupervisionSort>('lote')
+  const [supervisionDirection, setSupervisionDirection] = useState<'asc' | 'desc'>('asc')
   const requestGeneration = useRef(0)
   const loadController = useRef<AbortController | null>(null)
   const currentScope = useRef(supervisionView)
@@ -61,6 +71,7 @@ export default function Lotes({ supervisionView = false }: { supervisionView?: b
         ])
         if (generation !== requestGeneration.current || currentScope.current !== scope) return
         setItems(lots)
+        setSupervisionPage(1)
         setOperatorStats(stats)
         setOperators(availableOperators)
       } else {
@@ -149,6 +160,31 @@ export default function Lotes({ supervisionView = false }: { supervisionView?: b
   }
 
   const supervisor = user?.rol !== 'usuario'
+  const sortSupervision = (key: SupervisionSort) => {
+    setSupervisionPage(1)
+    if (supervisionSort === key) setSupervisionDirection((current) => current === 'asc' ? 'desc' : 'asc')
+    else { setSupervisionSort(key); setSupervisionDirection('asc') }
+  }
+  const supervisionItems = [...items].sort((a, b) => {
+    let result = 0
+    if (supervisionSort === 'lote') {
+      const aDate = lotDate(a)
+      const bDate = lotDate(b)
+      result = aDate === bDate ? a.nombre.localeCompare(b.nombre, 'es') : aDate - bDate
+    }
+    if (supervisionSort === 'operador') result = (a.operadores[0]?.nombre || a.operadores[0]?.username || '').localeCompare(b.operadores[0]?.nombre || b.operadores[0]?.username || '', 'es')
+    if (supervisionSort === 'estado') result = a.estado.localeCompare(b.estado, 'es')
+    if (supervisionSort === 'avance') result = a.metricas.porcentaje - b.metricas.porcentaje
+    if (supervisionSort === 'asignado') {
+      const aDate = a.assigned_at ? new Date(a.assigned_at).getTime() : Number.POSITIVE_INFINITY
+      const bDate = b.assigned_at ? new Date(b.assigned_at).getTime() : Number.POSITIVE_INFINITY
+      result = aDate === bDate ? 0 : aDate - bDate
+    }
+    return supervisionDirection === 'asc' ? result : -result
+  })
+  const supervisionPages = Math.max(1, Math.ceil(supervisionItems.length / 5))
+  const supervisionPageItems = supervisionItems.slice((supervisionPage - 1) * 5, supervisionPage * 5)
+  const sortLabel = (key: SupervisionSort) => supervisionSort === key ? (supervisionDirection === 'asc' ? ' ▲' : ' ▼') : ' ⇅'
   return (
     <div className="mx-auto max-w-7xl">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
@@ -168,16 +204,16 @@ export default function Lotes({ supervisionView = false }: { supervisionView?: b
             <table className="w-full min-w-[1050px] text-sm">
               <thead className="bg-slate-50">
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-4 py-3">Lote</th>
-                  <th className="px-4 py-3">Operador</th>
-                  <th className="px-4 py-3">Estado</th>
-                  <th className="min-w-64 px-4 py-3">Avance</th>
-                  <th className="px-4 py-3">Asignado</th>
+                  <th className="px-4 py-3"><button onClick={() => sortSupervision('lote')} className="font-semibold hover:text-slate-900">Lote{sortLabel('lote')}</button></th>
+                  <th className="px-4 py-3"><button onClick={() => sortSupervision('operador')} className="font-semibold hover:text-slate-900">Operador{sortLabel('operador')}</button></th>
+                  <th className="px-4 py-3"><button onClick={() => sortSupervision('estado')} className="font-semibold hover:text-slate-900">Estado{sortLabel('estado')}</button></th>
+                  <th className="min-w-64 px-4 py-3"><button onClick={() => sortSupervision('avance')} className="font-semibold hover:text-slate-900">Avance{sortLabel('avance')}</button></th>
+                  <th className="px-4 py-3"><button onClick={() => sortSupervision('asignado')} className="font-semibold hover:text-slate-900">Asignado{sortLabel('asignado')}</button></th>
                   <th className="px-4 py-3 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((lote) => (
+                {supervisionPageItems.map((lote) => (
                   <tr key={lote.id} className="border-b border-slate-100 align-middle last:border-0 hover:bg-slate-50/70">
                     <td className="max-w-72 px-4 py-3">
                       <div className="truncate font-semibold text-slate-900" title={lote.nombre}>{lote.nombre}</div>
@@ -215,7 +251,7 @@ export default function Lotes({ supervisionView = false }: { supervisionView?: b
               </tbody>
             </table>
           </div>
-          <div className="border-t border-slate-100 bg-slate-50 px-4 py-2 text-xs text-slate-500">{items.length} lotes mostrados</div>
+          <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-4 py-2 text-xs text-slate-500"><span>{items.length} lotes mostrados</span><div className="flex items-center gap-2"><button onClick={() => setSupervisionPage((current) => current - 1)} disabled={supervisionPage === 1} className="rounded border border-slate-300 bg-white px-2 py-1 disabled:opacity-40">Anterior</button><span>Página {supervisionPage} de {supervisionPages}</span><button onClick={() => setSupervisionPage((current) => current + 1)} disabled={supervisionPage === supervisionPages} className="rounded border border-slate-300 bg-white px-2 py-1 disabled:opacity-40">Siguiente</button></div></div>
         </div>
 
         <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

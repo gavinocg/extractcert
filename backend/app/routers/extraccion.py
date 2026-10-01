@@ -32,7 +32,7 @@ class OrigIn(BaseModel):
     inicio: int
     fin: int
     rotacion: int = 0
-    orden_paginas: list[int] = Field(default_factory=list)
+    orden_paginas: list[int] = Field(default_factory=list, max_length=500)
 
 
 class GuardarIn(OrigIn):

@@ -9,6 +9,7 @@ from app.routers import errores
 
 @pytest.mark.parametrize("role", ["supervisor", "administrador"])
 def test_supervision_puede_enviar_errores_de_cualquier_lote(monkeypatch, role):
+    monkeypatch.setenv("ERROR_EMAIL_ALLOWED_DOMAINS", "example.com")
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     db = Session(engine)
@@ -35,6 +36,7 @@ def test_supervision_puede_enviar_errores_de_cualquier_lote(monkeypatch, role):
 
 @pytest.mark.parametrize("role", ["supervisor", "administrador"])
 def test_supervision_puede_enviar_todos_los_errores(monkeypatch, role):
+    monkeypatch.setenv("ERROR_EMAIL_ALLOWED_DOMAINS", "example.com")
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     db = Session(engine)
@@ -57,6 +59,7 @@ def test_supervision_puede_enviar_todos_los_errores(monkeypatch, role):
 
 
 def test_usuario_envia_todos_solo_de_sus_lotes(monkeypatch):
+    monkeypatch.setenv("ERROR_EMAIL_ALLOWED_DOMAINS", "example.com")
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     db = Session(engine)
@@ -81,3 +84,42 @@ def test_usuario_envia_todos_solo_de_sus_lotes(monkeypatch):
 
     assert "a.pdf" in sent[0]
     assert "b.pdf" not in sent[0]
+
+
+def test_email_extra_requiere_dominio_permitido(monkeypatch):
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = Session(engine)
+    user = User(username="admin", password_hash="x", rol="administrador", estado="activo")
+    db.add(user)
+    db.flush()
+    error = TramiteError(original_path="/lote/a.pdf", archivo="a.pdf", observacion="Error", user_id=user.id)
+    db.add(error)
+    db.commit()
+    monkeypatch.setenv("ERROR_EMAIL_ALLOWED_DOMAINS", "empresa.test")
+
+    with pytest.raises(Exception) as exc:
+        errores.enviar(errores.EnviarIn(ids=[error.id], emails_extra=["fuera@example.com"]), user, db, None)
+
+    assert exc.value.status_code == 400
+
+
+def test_envio_aplica_cuota_y_registra_auditoria(monkeypatch):
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = Session(engine)
+    user = User(username="admin", password_hash="x", rol="administrador", estado="activo")
+    db.add(user)
+    db.flush()
+    error = TramiteError(original_path="/lote/a.pdf", archivo="a.pdf", observacion="Error", user_id=user.id)
+    db.add(error)
+    db.commit()
+    monkeypatch.setenv("ERROR_EMAIL_ALLOWED_DOMAINS", "example.com")
+    monkeypatch.setenv("ERROR_EMAIL_RATE_LIMIT", "1")
+    monkeypatch.setattr(errores, "enviar_correo", lambda *args: None)
+
+    errores.enviar(errores.EnviarIn(ids=[error.id], emails_extra=["ok@example.com"]), user, db, None)
+    with pytest.raises(Exception) as exc:
+        errores.enviar(errores.EnviarIn(ids=[error.id], emails_extra=["ok@example.com"]), user, db, None)
+
+    assert exc.value.status_code == 429

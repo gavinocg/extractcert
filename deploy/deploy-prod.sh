@@ -6,8 +6,15 @@ set -euo pipefail
 
 APP_DIR=/opt/extractcert
 BRANCH=prod
-URL=http://127.0.0.1:8000/
+URL=http://127.0.0.1:8000/healthz
 VENV="$APP_DIR/backend/.venv/bin"
+LOCK_FILE=/run/lock/extractcert-deploy.lock
+
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  logger -t extractcert-deploy "otro despliegue está en curso"
+  exit 0
+fi
 
 cd "$APP_DIR"
 git fetch -q origin "$BRANCH"
@@ -59,7 +66,7 @@ systemctl restart extractcert
 OK=0
 for i in $(seq 1 12); do
   sleep 10
-  if curl -sf -m 10 "$URL" -o /dev/null && curl -sf -m 10 "${URL}docs" -o /dev/null; then
+  if curl -sf -m 10 "$URL" -o /dev/null; then
     OK=1
     break
   fi

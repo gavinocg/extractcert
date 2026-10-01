@@ -3,18 +3,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..core.deps import require_admin, require_csrf, get_current_user
+from ..core.deps import require_admin, require_csrf
 from ..db.database import get_db
 from ..db.models import User
 from ..services import repo
-from ..services.email import enviar_correo_config
+from ..services.email import enviar_correo_config, validar_host_smtp
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 
 @router.get("")
 def get_settings(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     return {
@@ -75,12 +75,18 @@ def update_smtp_settings(
     db: Session = Depends(get_db),
     _: None = Depends(require_csrf),
 ):
-    if not body.host.strip() or not body.user.strip():
+    host = body.host.strip().rstrip(".").lower()
+    if not host or not body.user.strip():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Servidor y usuario SMTP son obligatorios.")
     if body.port < 1 or body.port > 65535:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "El puerto SMTP no es válido.")
+    saved = repo.smtp_settings(db)
+    try:
+        validar_host_smtp(host, permitir_red_interna=host == saved["host"].strip().rstrip(".").lower())
+    except ValueError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El servidor SMTP no es válido o no está permitido.")
     values = {
-        "smtp_host": body.host.strip(),
+        "smtp_host": host,
         "smtp_port": str(body.port),
         "smtp_user": body.user.strip(),
         "smtp_tls": str(body.tls).lower(),
@@ -88,6 +94,8 @@ def update_smtp_settings(
     }
     if body.password:
         values["smtp_pass"] = repo.encrypt_secret(body.password)
+    elif host != saved["host"].strip().rstrip(".").lower() or body.user.strip() != saved["user"]:
+        values["smtp_pass"] = repo.encrypt_secret("")
     repo.set_settings(db, values)
     return {"ok": True}
 
@@ -103,13 +111,18 @@ def test_smtp_settings(
     if not recipient or "@" not in recipient:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ingrese un correo destinatario válido.")
     saved = repo.smtp_settings(db)
+    host = body.host.strip().rstrip(".").lower()
+    saved_host = saved["host"].strip().rstrip(".").lower()
+    if host != saved_host:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "La prueba solo puede usar el servidor SMTP guardado.")
     config = {
-        "host": body.host.strip(),
+        "host": host,
         "port": body.port,
         "user": body.user.strip(),
-        "password": body.password or saved["password"],
+        "password": body.password or (saved["password"] if body.user.strip() == saved["user"] else ""),
         "tls": body.tls,
         "from_email": body.from_email.strip(),
+        "permitir_red_interna": True,
     }
     if not config["host"] or not config["user"] or not config["password"]:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Complete servidor, usuario y contraseña SMTP.")
@@ -118,6 +131,6 @@ def test_smtp_settings(
 <div style="padding:24px;color:#334155"><p>Este correo confirma que los parámetros SMTP ingresados pueden enviar notificaciones correctamente.</p><p style="font-size:12px;color:#94a3b8">Mensaje automático de verificación.</p></div></div>"""
     try:
         enviar_correo_config(config, [recipient], "ExtractCert: prueba de configuración SMTP", html, "Prueba SMTP exitosa. Los parámetros ingresados funcionan correctamente.")
-    except Exception as exc:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"No se pudo enviar el correo de prueba: {exc}")
+    except Exception:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "No se pudo enviar el correo de prueba.")
     return {"ok": True, "recipient": recipient}

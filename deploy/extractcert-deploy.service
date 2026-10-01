@@ -6,3 +6,12 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/opt/extractcert/deploy/deploy-prod.sh
+UMask=0027
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictRealtime=true
+LockPersonality=true
+SystemCallArchitectures=native

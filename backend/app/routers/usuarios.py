@@ -103,7 +103,7 @@ def crear(
         password_hash=security.hash_password(body.password),
         rol=_rol_valido(body.rol),
         estado=_estado_valido(body.estado),
-        must_change_password=True if body.must_change_password is None else body.must_change_password,
+        must_change_password=True,
     )
     db.add(u)
     try:
@@ -152,13 +152,14 @@ def actualizar(
     u.rol = new_role
     u.estado = new_status
     password_changed = bool(body.password)
-    obligation_changed = body.must_change_password is not None and body.must_change_password != u.must_change_password
-    force_change_requested = body.must_change_password is True
+    requested_obligation = True if password_changed else body.must_change_password
+    obligation_changed = requested_obligation is not None and requested_obligation != u.must_change_password
+    force_change_requested = requested_obligation is True
     if body.password:
         u.password_hash = security.hash_password(body.password)
         u.password_changed_at = datetime.now()
-    if body.must_change_password is not None:
-        u.must_change_password = body.must_change_password
+    if requested_obligation is not None:
+        u.must_change_password = requested_obligation
     audit_event = None
     if password_changed or obligation_changed or force_change_requested:
         u.token_version += 1

@@ -2,9 +2,10 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .core.config import settings
 from .db.database import SessionLocal, init_db
@@ -31,16 +32,20 @@ def _seed() -> None:
     db = SessionLocal()
     try:
         if not db.query(User).filter(User.rol == "administrador").first():
-            db.add(
-                User(
-                    username="admin",
-                    nombre="Administrador",
-                    password_hash=security.hash_password("Temporal-2026!"),
-                    rol="administrador",
-                    estado="activo",
-                    must_change_password=True,
+            if settings.admin_bootstrap_password:
+                security.validate_password(settings.admin_bootstrap_password, "admin")
+                db.add(
+                    User(
+                        username="admin",
+                        nombre="Administrador",
+                        password_hash=security.hash_password(settings.admin_bootstrap_password),
+                        rol="administrador",
+                        estado="activo",
+                        must_change_password=True,
+                    )
                 )
-            )
+            elif settings.is_production:
+                raise RuntimeError("No existe un administrador y ADMIN_BOOTSTRAP_PASSWORD no está configurada.")
         for clave, valor in (
             ("raiz_origen", settings.default_raiz_origen),
             ("raiz_repo", settings.default_raiz_repo),
@@ -68,7 +73,48 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="ExtractCert", lifespan=lifespan)
+app = FastAPI(
+    title="ExtractCert",
+    lifespan=lifespan,
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
+)
+
+allowed_hosts = {"127.0.0.1", "localhost"}
+if settings.app_url:
+    from urllib.parse import urlsplit
+    if hostname := urlsplit(settings.app_url).hostname:
+        allowed_hosts.add(hostname)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=sorted(allowed_hosts))
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "same-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; "
+        "script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; font-src 'self'"
+    )
+    if settings.is_production:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000"
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "private, no-store"
+    elif request.url.path == "/" or not request.url.path.rsplit("/", 1)[-1].count("."):
+        response.headers["Cache-Control"] = "no-cache"
+    elif request.url.path.startswith(("/assets/", "/pdfjs-wasm/")):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
+
+
+@app.get("/healthz", include_in_schema=False)
+def healthz():
+    return {"status": "ok"}
 
 app.include_router(auth.router)
 full_access = [Depends(require_full_access)]

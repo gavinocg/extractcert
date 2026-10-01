@@ -195,10 +195,10 @@ def enviar(body: EnviarIn, user: User = Depends(get_current_user), db: Session =
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Indique destinatarios.")
     asunto = body.asunto.strip() or "Trámites con error en digital"
     cuerpo_extra = body.cuerpo.strip()
-    filas = "".join([f"<tr><td>{escape(e.archivo)}</td><td>{escape(e.observacion)}</td><td>{escape(e.original_path)}</td></tr>" for e in errores])
+    filas = "".join([f"<tr><td>{escape(e.archivo)}</td><td>{escape(e.observacion)}</td></tr>" for e in errores])
     html = f"<p>{escape(cuerpo_extra)}</p>" if cuerpo_extra else ""
-    html += f"<table border='1' cellpadding='6' cellspacing='0'><tr><th>Trámite (archivo)</th><th>Observación</th><th>Ruta</th></tr>{filas}</table>"
-    txt = cuerpo_extra + "\n" + "\n".join([f"{e.archivo} | {e.observacion} | {e.original_path}" for e in errores])
+    html += f"<table border='1' cellpadding='6' cellspacing='0'><tr><th>Trámite (archivo)</th><th>Observación</th></tr>{filas}</table>"
+    txt = cuerpo_extra + "\n" + "\n".join([f"{e.archivo} | {e.observacion}" for e in errores])
     try:
         enviar_correo(destinatarios, asunto, html, txt)
     except Exception:

@@ -31,6 +31,11 @@ function durationLabel(seconds: number | null) {
   return [days ? `${days} d` : '', hours ? `${hours} h` : '', `${minutes} min`].filter(Boolean).join(' ')
 }
 
+function lotDate(lote: Lote) {
+  const match = `${lote.nombre} ${lote.relative_path}`.match(/(?:^|\D)(\d{2})-(\d{2})-(\d{4})(?:\D|$)/)
+  return match ? Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1])) : Number.POSITIVE_INFINITY
+}
+
 function withOperatorLabel(lote: Lote): Lote {
   const names = lote.operadores.map((operator) => operator.nombre || operator.username).join(', ')
   return names ? { ...lote, operador: { ...(lote.operador ?? lote.operadores[0]), nombre: names } } : lote
@@ -39,6 +44,7 @@ function withOperatorLabel(lote: Lote): Lote {
 export default function Archivados() {
   const toast = useToast((state) => state.show)
   const [items, setItems] = useState<Lote[]>([])
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [detail, setDetail] = useState<ArchiveSummary | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(0)
@@ -47,7 +53,10 @@ export default function Archivados() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      setItems((await api.get<Lote[]>('/api/lotes?scope=archived')).map(withOperatorLabel))
+      const lots = (await api.get<Lote[]>('/api/lotes?scope=archived')).map(withOperatorLabel)
+      lots.sort((a, b) => lotDate(a) - lotDate(b) || a.nombre.localeCompare(b.nombre, 'es'))
+      setItems(lots)
+      setPage(1)
     } catch (error) {
       toast(error instanceof Error ? error.message : 'No se pudieron cargar los archivados', 'error')
     } finally {
@@ -76,6 +85,9 @@ export default function Archivados() {
     }
   }
 
+  const totalPages = Math.ceil(items.length / 10)
+  const pageItems = items.slice((page - 1) * 10, page * 10)
+
   return (
     <div className="mx-auto max-w-7xl">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
@@ -84,7 +96,7 @@ export default function Archivados() {
       </div>
 
       {loading ? <div className="text-slate-500">Cargando archivados…</div> : items.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center text-slate-500">Todavía no hay lotes archivados.</div> : (
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead className="bg-slate-50"><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500"><th className="px-4 py-3">Lote</th><th className="px-4 py-3">Responsable</th><th className="px-4 py-3 text-center">PDF</th><th className="px-4 py-3">Asignado</th><th className="px-4 py-3">Finalizado</th><th className="px-4 py-3">Despachado</th><th className="px-4 py-3 text-right">Acción</th></tr></thead><tbody>{items.map((lote) => <tr key={lote.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70"><td className="max-w-72 px-4 py-3"><div className="truncate font-semibold text-slate-900">{lote.nombre}</div><div className="truncate text-xs text-slate-400" title={lote.relative_path}>{lote.relative_path}</div></td><td className="px-4 py-3"><div className="font-medium text-slate-700">{lote.operador?.nombre || lote.operador?.username || '—'}</div>{lote.operador?.nombre && <div className="text-xs text-slate-400">@{lote.operador.username}</div>}</td><td className="px-4 py-3 text-center font-bold text-slate-700">{lote.metricas.total}</td><td className="whitespace-nowrap px-4 py-3 text-xs">{dateLabel(lote.assigned_at)}</td><td className="whitespace-nowrap px-4 py-3 text-xs">{dateLabel(lote.completed_at)}</td><td className="whitespace-nowrap px-4 py-3 text-xs">{dateLabel(lote.notified_at)}</td><td className="px-4 py-3 text-right"><button onClick={() => void openDetail(lote)} disabled={loadingDetail === lote.id} className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-50">{loadingDetail === lote.id ? 'Cargando…' : 'Ver'}</button></td></tr>)}</tbody></table></div><div className="border-t border-slate-100 bg-slate-50 px-4 py-2 text-xs text-slate-500">{items.length} lotes archivados</div></div>
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead className="bg-slate-50"><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500"><th className="px-4 py-3">Lote</th><th className="px-4 py-3">Responsable</th><th className="px-4 py-3 text-center">PDF</th><th className="px-4 py-3">Asignado</th><th className="px-4 py-3">Finalizado</th><th className="px-4 py-3">Despachado</th><th className="px-4 py-3 text-right">Acción</th></tr></thead><tbody>{pageItems.map((lote) => <tr key={lote.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70"><td className="max-w-72 px-4 py-3"><div className="truncate font-semibold text-slate-900">{lote.nombre}</div><div className="truncate text-xs text-slate-400" title={lote.relative_path}>{lote.relative_path}</div></td><td className="px-4 py-3"><div className="font-medium text-slate-700">{lote.operador?.nombre || lote.operador?.username || '—'}</div>{lote.operador?.nombre && <div className="text-xs text-slate-400">@{lote.operador.username}</div>}</td><td className="px-4 py-3 text-center font-bold text-slate-700">{lote.metricas.total}</td><td className="whitespace-nowrap px-4 py-3 text-xs">{dateLabel(lote.assigned_at)}</td><td className="whitespace-nowrap px-4 py-3 text-xs">{dateLabel(lote.completed_at)}</td><td className="whitespace-nowrap px-4 py-3 text-xs">{dateLabel(lote.notified_at)}</td><td className="px-4 py-3 text-right"><button onClick={() => void openDetail(lote)} disabled={loadingDetail === lote.id} className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-50">{loadingDetail === lote.id ? 'Cargando…' : 'Ver'}</button></td></tr>)}</tbody></table></div><div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-4 py-2 text-xs text-slate-500"><span>{items.length} lotes archivados</span><div className="flex items-center gap-2"><button onClick={() => setPage((current) => current - 1)} disabled={page === 1} className="rounded border border-slate-300 bg-white px-2 py-1 disabled:opacity-40">Anterior</button><span>Página {page} de {totalPages}</span><button onClick={() => setPage((current) => current + 1)} disabled={page === totalPages} className="rounded border border-slate-300 bg-white px-2 py-1 disabled:opacity-40">Siguiente</button></div></div></div>
       )}
 
       {detail && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-6" role="dialog" aria-modal="true"><div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white shadow-2xl"><div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200 bg-white px-5 py-4"><div><div className="text-xs font-bold uppercase tracking-widest text-emerald-600">Atendido y despachado</div><h2 className="text-xl font-bold text-slate-900">{detail.lote.nombre}</h2><p className="text-xs text-slate-400">{detail.lote.relative_path}</p></div><button onClick={() => setDetail(null)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">Cerrar</button></div><div className="space-y-6 p-5">

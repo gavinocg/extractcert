@@ -1,4 +1,7 @@
 """Dependencias FastAPI: usuario actual, roles y CSRF."""
+import secrets
+from urllib.parse import urlsplit
+
 from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
@@ -14,6 +17,19 @@ FORBIDDEN = HTTPException(
     status_code=status.HTTP_403_FORBIDDEN,
     detail="Sesión expirada o token inválido.",
 )
+
+
+def require_trusted_origin(request: Request) -> None:
+    origin = request.headers.get("origin")
+    if not origin:
+        return
+    expected = urlsplit(security.settings.app_url)
+    supplied = urlsplit(origin)
+    if (supplied.scheme.casefold(), supplied.netloc.casefold()) != (
+        expected.scheme.casefold(),
+        expected.netloc.casefold(),
+    ):
+        raise FORBIDDEN
 
 
 def get_current_user(
@@ -71,5 +87,6 @@ def require_csrf(
     csrf_token: str | None = Cookie(default=None),
     x_csrf_token: str | None = Header(default=None),
 ) -> None:
-    if not csrf_token or not x_csrf_token or csrf_token != x_csrf_token:
+    require_trusted_origin(request)
+    if not csrf_token or not x_csrf_token or not secrets.compare_digest(csrf_token, x_csrf_token):
         raise FORBIDDEN

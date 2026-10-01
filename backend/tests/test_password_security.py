@@ -11,7 +11,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session
 
 from app.core import security
-from app.core.deps import get_current_user, require_full_access
+from app.core.config import Settings
+from app.core.deps import get_current_user, require_csrf, require_full_access, require_trusted_origin
 from app.db.database import Base
 from app.db.models import SecurityAudit, User
 from app.routers import auth, usuarios
@@ -23,8 +24,16 @@ def database() -> Session:
     return Session(engine)
 
 
-def request(ip="127.0.0.1"):
-    return SimpleNamespace(client=SimpleNamespace(host=ip))
+def request(ip="127.0.0.1", origin=None):
+    headers = {"origin": origin} if origin else {}
+    return SimpleNamespace(client=SimpleNamespace(host=ip), headers=headers)
+
+
+def response():
+    result = SimpleNamespace(cookies={}, deleted=[])
+    result.set_cookie = lambda **kwargs: result.cookies.update({kwargs["key"]: kwargs["value"]})
+    result.delete_cookie = lambda key, **kwargs: result.deleted.append(key)
+    return result
 
 
 def user(db, username="persona", password="Clave-segura-2026", **values):
@@ -91,6 +100,75 @@ def test_cambio_password_incrementa_version_y_reemite_cookie():
     assert isinstance(row.password_changed_at, datetime)
     assert "access_token" in response.cookies
     assert db.query(SecurityAudit).filter_by(evento="cambio_password").count() == 1
+
+
+def test_login_responde_igual_para_usuario_inexistente_e_inactivo(monkeypatch):
+    db = database()
+    user(db, "inactivo", estado="inactivo")
+    monkeypatch.setattr(auth, "login_limiter", auth.LoginRateLimiter())
+    errors = []
+    for username in ("ausente", "inactivo"):
+        with pytest.raises(HTTPException) as exc:
+            auth.login(auth.LoginIn(username=username, password="incorrecta"), response(), request(), db)
+        errors.append((exc.value.status_code, exc.value.detail))
+    assert errors == [(401, auth.INVALID_LOGIN), (401, auth.INVALID_LOGIN)]
+
+
+def test_rate_limit_es_por_ip_usuario_y_tiene_memoria_acotada():
+    limiter = auth.LoginRateLimiter(limit=2, window_seconds=300, max_keys=2)
+    key = ("127.0.0.1", "persona")
+    assert limiter.check(key)
+    limiter.failure(key)
+    assert limiter.check(key)
+    limiter.failure(key)
+    assert not limiter.check(key)
+    assert limiter.check(("127.0.0.2", "persona"))
+    assert limiter.check(("127.0.0.1", "otra"))
+    assert len(limiter._attempts) == 2
+
+
+def test_logout_exige_csrf_y_revoca_token():
+    db = database()
+    row = user(db)
+    result = response()
+    auth.logout(result, request(), db, row, None)
+    assert row.token_version == 2
+    assert result.deleted == ["access_token", "csrf_token"]
+    route = next(route for route in auth.router.routes if route.path == "/api/auth/logout")
+    assert any(dependency.call is require_csrf for dependency in route.dependant.dependencies)
+
+
+def test_origin_y_csrf_se_validan_con_comparacion_segura(monkeypatch):
+    require_trusted_origin(request(origin=security.settings.app_url))
+    with pytest.raises(HTTPException):
+        require_trusted_origin(request(origin="https://evil.example"))
+    called = False
+    original = __import__("secrets").compare_digest
+
+    def compared(left, right):
+        nonlocal called
+        called = True
+        return original(left, right)
+
+    monkeypatch.setattr("app.core.deps.secrets.compare_digest", compared)
+    require_csrf(request(), "token", "token")
+    assert called
+
+
+def test_defaults_y_validacion_de_produccion():
+    development = Settings(_env_file=None)
+    assert development.access_token_expire_minutes == 60
+    with pytest.raises(ValueError):
+        Settings(environment="production", app_url="http://example.com", _env_file=None)
+    with pytest.raises(ValueError):
+        Settings(environment="production", app_url="https://example.com", secret_key="x" * 32, _env_file=None)
+    production = Settings(
+        environment="production",
+        app_url="https://example.com",
+        secret_key="0123456789abcdef0123456789abcdef",
+        _env_file=None,
+    )
+    assert production.is_production
 
 
 def test_admin_reset_y_forzado_expulsan_sesiones():

@@ -1,4 +1,7 @@
 import os
+import logging
+from datetime import datetime, timedelta
+from email.utils import parseaddr
 from html import escape
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -7,13 +10,37 @@ from sqlalchemy.orm import Session
 
 from ..core.deps import get_current_user, require_csrf
 from ..db.database import get_db
-from ..db.models import AssignmentLock, Contacto, Lote, LoteDocumento, LoteOperador, TramiteError, User
+from ..db.models import AssignmentLock, Contacto, Lote, LoteDocumento, LoteOperador, SecurityAudit, TramiteError, User
 from ..services import fs
 from ..services.email import enviar_correo
 from ..services.lotes import require_path_access
 from ..services.repo import raiz_origen
 
 router = APIRouter(prefix="/api/errores", tags=["errores"])
+logger = logging.getLogger(__name__)
+
+
+def _env_int(nombre: str, defecto: int, minimo: int = 1) -> int:
+    try:
+        return max(minimo, int(os.getenv(nombre, str(defecto))))
+    except ValueError:
+        return defecto
+
+
+def _email_valido(valor: str) -> str | None:
+    email = parseaddr(valor.strip())[1].lower()
+    if email != valor.strip().lower() or email.count("@") != 1:
+        return None
+    local, domain = email.rsplit("@", 1)
+    if not local or not domain or "." not in domain or any(not part for part in domain.split(".")):
+        return None
+    return email
+
+
+def _dominio_extra_permitido(email: str) -> bool:
+    permitidos = {item.strip().lower().lstrip("@") for item in os.getenv("ERROR_EMAIL_ALLOWED_DOMAINS", "").split(",") if item.strip()}
+    domain = email.rsplit("@", 1)[1]
+    return bool(permitidos) and any(domain == item or domain.endswith("." + item) for item in permitidos)
 
 
 class ErrorIn(BaseModel):
@@ -127,6 +154,16 @@ def eliminar(eid: int, lease_token: str = Query(...), user: User = Depends(get_c
 
 @router.post("/enviar")
 def enviar(body: EnviarIn, user: User = Depends(get_current_user), db: Session = Depends(get_db), _: None = Depends(require_csrf)):
+    ventana = _env_int("ERROR_EMAIL_RATE_WINDOW_SECONDS", 3600)
+    cuota = _env_int("ERROR_EMAIL_RATE_LIMIT", 10)
+    desde = datetime.now() - timedelta(seconds=ventana)
+    usados = db.query(SecurityAudit).filter(
+        SecurityAudit.actor_id == user.id,
+        SecurityAudit.evento == "error_report_email_sent",
+        SecurityAudit.created_at >= desde,
+    ).count()
+    if usados >= cuota:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Se alcanzó el límite temporal de envíos.")
     if not body.todos and not body.ids:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Seleccione al menos un trámite.")
     query = db.query(TramiteError)
@@ -149,9 +186,10 @@ def enviar(body: EnviarIn, user: User = Depends(get_current_user), db: Session =
         contactos = db.query(Contacto).filter(Contacto.id.in_(body.contactos_ids)).all()
         destinatarios.extend([c.email for c in contactos])
     for em in body.emails_extra:
-        em = em.strip()
-        if em and "@" in em:
-            destinatarios.append(em)
+        email = _email_valido(em)
+        if not email or not _dominio_extra_permitido(email):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Uno o más destinatarios adicionales no están permitidos.")
+        destinatarios.append(email)
     destinatarios = list(dict.fromkeys(destinatarios))
     if not destinatarios:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Indique destinatarios.")
@@ -163,6 +201,10 @@ def enviar(body: EnviarIn, user: User = Depends(get_current_user), db: Session =
     txt = cuerpo_extra + "\n" + "\n".join([f"{e.archivo} | {e.observacion} | {e.original_path}" for e in errores])
     try:
         enviar_correo(destinatarios, asunto, html, txt)
-    except Exception as ex:
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Error enviando correo: {ex}")
+    except Exception:
+        logger.exception("Fallo al enviar reporte de errores", extra={"user_id": user.id})
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "No se pudo enviar el reporte por correo.")
+    db.add(SecurityAudit(usuario_id=user.id, actor_id=user.id, evento="error_report_email_sent"))
+    db.commit()
+    logger.info("Reporte de errores enviado", extra={"user_id": user.id, "recipient_count": len(destinatarios), "error_count": len(errores)})
     return {"ok": True, "enviados": len(destinatarios)}

@@ -50,7 +50,7 @@ git checkout dev
 2. `webhook.py` responde 202 y ejecuta `deploy/deploy-prod.sh`:
    fetch, fast-forward (`reset --hard`), `chown storage/`,
    `pip install` si cambió `requirements.txt`, restart,
-   healthcheck (`/` y `/docs`) y rollback automático ante fallo.
+   healthcheck (`/healthz`) y rollback automático ante fallo.
 3. Timer `extractcert-deploy` cada 30 min como respaldo.
 
 ## Verificación post-deploy
@@ -81,3 +81,16 @@ En el navegador: recarga fuerte (`Ctrl+F5`) para soltar `index.html` cacheado.
 - **Build vacío vía `.bin\vite`**: usar `node node_modules/vite/bin/vite.js build`.
 - **Comillas/espacios vía plink**: consultas SQL en base64, rutas con `%20`,
   evitar `$(...)`, pipes con patrones sin comillas.
+
+## Seguridad operativa
+- El webhook limita el cuerpo a 1 MiB, exige `Content-Length`, aplica timeout,
+  deduplica entregas y permite un único deploy. El script usa además `flock`,
+  por lo que webhook y timer tampoco pueden desplegar simultáneamente.
+- El webhook permanece como `root` porque el flujo actual necesita modificar el
+  checkout, cambiar propietarios y reiniciar la unidad. Ejecutarlo sin privilegios
+  requiere instalar un helper/unidad root activable con una política explícita;
+  no debe darse acceso general a `systemctl` o al script mediante `sudo`.
+- Las unidades de deploy no usan `NoNewPrivileges` ni `ProtectHome`: el script
+  baja privilegios con `sudo -u extractcert` y Git puede depender de `/root/.ssh`.
+- Tras instalar las unidades actualizadas: `systemctl daemon-reload` y reiniciar
+  `extractcert`, `extractcert-webhook` y `extractcert-deploy.timer`.

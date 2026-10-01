@@ -59,6 +59,7 @@ class LoginRateLimiter:
 
 login_limiter = LoginRateLimiter()
 login_ip_limiter = LoginRateLimiter(limit=20)
+login_account_limiter = LoginRateLimiter(limit=10)
 INVALID_LOGIN = "Usuario o contraseña incorrectos."
 DUMMY_PASSWORD_HASH = security.hash_password(secrets.token_urlsafe(32))
 
@@ -98,13 +99,15 @@ def login(form: LoginIn, response: Response, request: Request, db: Session = Dep
     ip = forwarded if peer_ip in {"127.0.0.1", "::1"} and forwarded else peer_ip
     rate_key = (ip, form.username.casefold()[:128])
     ip_key = (ip, "*")
-    if not login_limiter.check(rate_key) or not login_ip_limiter.check(ip_key):
+    account_key = ("*", form.username.casefold()[:128])
+    if not login_limiter.check(rate_key) or not login_ip_limiter.check(ip_key) or not login_account_limiter.check(account_key):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Demasiados intentos. Intente más tarde.", headers={"Retry-After": "300"})
     user = db.query(User).filter(User.username == form.username).first()
     password_hash = user.password_hash if user else DUMMY_PASSWORD_HASH
     if not security.verify_password(form.password, password_hash) or not user:
         login_limiter.failure(rate_key)
         login_ip_limiter.failure(ip_key)
+        login_account_limiter.failure(account_key)
         if user:
             record(db, "login_fallido", user.id, user.id, ip)
         else:
@@ -113,9 +116,11 @@ def login(form: LoginIn, response: Response, request: Request, db: Session = Dep
     if user.estado != "activo":
         login_limiter.failure(rate_key)
         login_ip_limiter.failure(ip_key)
+        login_account_limiter.failure(account_key)
         record(db, "login_fallido", user.id, user.id, ip)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, INVALID_LOGIN)
     login_limiter.success(rate_key)
+    login_account_limiter.success(account_key)
     _set_cookies(response, user)
     record(db, "login_exitoso", user.id, user.id, ip)
     if user.must_change_password:

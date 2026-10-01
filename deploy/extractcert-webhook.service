@@ -5,14 +5,16 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# El deploy necesita git, chown y systemctl; separar el listener requiere un
-# helper privilegiado adicional. Se mantiene root y se restringe lo compatible.
-User=root
+User=extractcert
+Group=extractcert
 ExecStart=/usr/bin/python3 /opt/extractcert/deploy/webhook.py
 Restart=on-failure
 RestartSec=5
 UMask=0077
 PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectKernelLogs=true

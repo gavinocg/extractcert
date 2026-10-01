@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 LISTEN = ("127.0.0.1", 9000)
 SECRET_FILE = "/etc/extractcert-webhook.secret"
-DEPLOY_SCRIPT = "/opt/extractcert/deploy/deploy-prod.sh"
+DEPLOY_COMMAND = ["sudo", "/bin/systemctl", "start", "extractcert-deploy.service"]
 TARGET_REF = "refs/heads/prod"
 MAX_BODY = 1024 * 1024
 SOCKET_TIMEOUT = 10
@@ -156,7 +156,7 @@ def _desplegar():
     print("push a prod: ejecutando deploy", flush=True)
     try:
         r = subprocess.run(
-            ["bash", DEPLOY_SCRIPT], capture_output=True, text=True, timeout=600
+            DEPLOY_COMMAND, capture_output=True, text=True, timeout=30
         )
         print(r.stdout[-2000:], flush=True)
         if r.returncode != 0:

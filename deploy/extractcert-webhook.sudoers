@@ -1,0 +1,1 @@
+extractcert ALL=(root) NOPASSWD: /bin/systemctl start extractcert-deploy.service

@@ -112,6 +112,14 @@ async def security_headers(request: Request, call_next):
     return response
 
 
+if settings.is_production:
+    @app.get("/docs", include_in_schema=False)
+    @app.get("/redoc", include_in_schema=False)
+    @app.get("/openapi.json", include_in_schema=False)
+    def disabled_documentation():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Endpoint no encontrado.")
+
+
 @app.get("/healthz", include_in_schema=False)
 def healthz():
     return {"status": "ok"}

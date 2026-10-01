@@ -86,10 +86,9 @@ En el navegador: recarga fuerte (`Ctrl+F5`) para soltar `index.html` cacheado.
 - El webhook limita el cuerpo a 1 MiB, exige `Content-Length`, aplica timeout,
   deduplica entregas y permite un único deploy. El script usa además `flock`,
   por lo que webhook y timer tampoco pueden desplegar simultáneamente.
-- El webhook permanece como `root` porque el flujo actual necesita modificar el
-  checkout, cambiar propietarios y reiniciar la unidad. Ejecutarlo sin privilegios
-  requiere instalar un helper/unidad root activable con una política explícita;
-  no debe darse acceso general a `systemctl` o al script mediante `sudo`.
+- El webhook corre como `extractcert` y solo puede iniciar la unidad oneshot de
+  deploy mediante `deploy/extractcert-webhook.sudoers`. Instalar esa regla con
+  modo `0440` y mantener el secreto como `root:extractcert` con modo `0640`.
 - Las unidades de deploy no usan `NoNewPrivileges` ni `ProtectHome`: el script
   baja privilegios con `sudo -u extractcert` y Git puede depender de `/root/.ssh`.
 - Tras instalar las unidades actualizadas: `systemctl daemon-reload` y reiniciar

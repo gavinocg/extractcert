@@ -258,7 +258,25 @@ def metricas_directorio(db: Session, relative: str, nombre: str = "") -> dict:
     return {"total": total, "realizados": realizados, "errores": errores, "pendientes": pendientes, "porcentaje": round((realizados + errores) * 100 / total) if total else 0}
 
 
+def heal_operador(db: Session, lote: Lote) -> bool:
+    """Restaura el operador principal desde la membresía activa.
+
+    Evita lotes fantasma: un lote con responsables activos pero sin
+    operador principal quedaría fuera de Supervisión y de Archivados.
+    """
+    if lote.operador_id is not None:
+        return False
+    member = db.query(LoteOperador).filter(
+        LoteOperador.lote_id == lote.id, LoteOperador.activo.is_(True)
+    ).order_by(LoteOperador.id).first()
+    if member is None:
+        return False
+    lote.operador_id = member.operador_id
+    return True
+
+
 def sync_estado(db: Session, lote: Lote, stats: dict | None = None) -> dict:
+    heal_operador(db, lote)
     stats = stats or metricas(db, lote)
     now = datetime.now()
     if stats["total"] > 0 and stats["pendientes"] == 0:

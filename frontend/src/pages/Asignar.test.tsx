@@ -78,4 +78,18 @@ describe('Asignar carpeta completada sin responsables', () => {
       { relative_path: 'SEPTIEMBRE 2026/02-09-2026', operador_ids: [7] },
     ))
   })
+
+  it('al cambiar responsables de un lote Completado muestra Reasignar', async () => {
+    const user = userEvent.setup()
+    render(<Asignar />)
+
+    await screen.findByRole('button', { name: 'Asignar' })
+    expect(screen.getByText('Completado')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /1 responsable seleccionado/i }))
+    await user.click(screen.getByRole('checkbox', { name: /Gavino Carranco/ }))
+
+    expect(await screen.findByRole('button', { name: 'Reasignar' })).toBeInTheDocument()
+    expect(screen.queryByText('Completado')).not.toBeInTheDocument()
+  })
 })

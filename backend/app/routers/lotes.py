@@ -127,7 +127,12 @@ def listar(
         active_member = db.query(LoteOperador.id).filter(
             LoteOperador.lote_id == Lote.id, LoteOperador.activo.is_(True)
         ).exists()
-        q = q.filter(or_(Lote.operador_id.is_not(None), active_member))
+        wanted = or_(Lote.operador_id.is_not(None), active_member)
+        if scope == "supervision":
+            # Completados huérfanos (100% sin responsable): visibles para
+            # reasignar y despachar en lugar de quedar fantasma.
+            wanted = or_(wanted, Lote.estado == "completado")
+        q = q.filter(wanted)
     else:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bandeja no válida.")
     rows = q.order_by(Lote.assigned_at.desc(), Lote.nombre).all()
@@ -157,12 +162,14 @@ def counts(
     if user.rol in ("supervisor", "administrador"):
         progress = db.query(
             Lote.id,
+            Lote.estado,
+            Lote.operador_id,
             func.count(LoteDocumento.id).label("total"),
             func.sum(case((LoteDocumento.estado.in_(("completado", "error")), 1), else_=0)).label("done"),
         ).outerjoin(LoteDocumento, (LoteDocumento.lote_id == Lote.id) & LoteDocumento.presente.is_(True)).filter(
-            Lote.operador_id.is_not(None)
-        ).group_by(Lote.id).all()
-        supervision = sum(1 for _, total, done in progress if not total or done < total)
+            or_(Lote.operador_id.is_not(None), Lote.estado == "completado")
+        ).group_by(Lote.id, Lote.estado, Lote.operador_id).all()
+        supervision = sum(1 for _, estado, operador_id, total, done in progress if not total or done < total or (estado == "completado" and operador_id is None))
     return {"pending": pending, "supervision": supervision}
 
 

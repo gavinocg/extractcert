@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import Base
 from app.db.models import Extraccion, Lote, LoteOperador, TramiteError, User
+from app.routers import lotes as lotes_router
 from app.services import lotes as lote_service
 from app.services import notificaciones
 
@@ -175,3 +176,29 @@ def test_sync_estado_sin_miembros_marca_sin_asignar(tmp_path: Path, monkeypatch)
 
     assert lote.operador_id is None
     assert lote.estado == "sin_asignar"
+
+
+def test_listar_supervision_incluye_completado_huerfano(tmp_path: Path, monkeypatch):
+    folder = tmp_path / "02-09-2026"
+    folder.mkdir()
+    (folder / "uno.pdf").write_bytes(b"pdf")
+
+    db = _database()
+    monkeypatch.setattr(lote_service, "raiz_origen", lambda _: str(tmp_path))
+    worker = User(username="op", password_hash="hash", rol="usuario", estado="activo")
+    sup = User(username="sup", password_hash="hash", rol="supervisor", estado="activo")
+    db.add_all([worker, sup])
+    db.flush()
+    lote = Lote(relative_path="02-09-2026", nombre="02-09-2026", operador_id=None, estado="completado")
+    db.add(lote)
+    db.flush()
+    db.add(Extraccion(user_id=worker.id, lote_id=lote.id, original_path=str(folder / "uno.pdf").replace("\\", "/"), destino_path="out/uno.pdf", pagina_inicio=1, pagina_fin=1))
+    db.commit()
+
+    supervision = lotes_router.listar(scope="supervision", user=sup, db=db)
+    archived = lotes_router.listar(scope="archived", user=sup, db=db)
+    counts = lotes_router.counts(user=sup, db=db)
+
+    assert any(item["nombre"] == "02-09-2026" and item["estado"] == "completado" for item in supervision)
+    assert all(item["nombre"] != "02-09-2026" for item in archived)
+    assert counts["supervision"] >= 1

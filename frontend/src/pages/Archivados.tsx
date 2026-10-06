@@ -41,18 +41,22 @@ function durationLabel(seconds: number | null) {
 }
 
 function lotMonth(lote: Lote) {
-  const match = lote.nombre.match(/(?:^|\D)(\d{2})-(\d{2})-(\d{4})(?:\D|$)/)
+  const match = lote.nombre.match(/(?:^|\D)(\d{1,2})-(\d{1,2})-(\d{4})(?:\D|$)/)
   if (!match) return null
 
-  const day = Number(match[1])
-  const month = Number(match[2])
+  const first = Number(match[1])
+  const second = Number(match[2])
   const year = Number(match[3])
-  if (day < 1 || day > 31 || month < 1 || month > 12) return null
-  return { year, month, timestamp: Date.UTC(year, month - 1) }
+  if (first < 1 || second < 1) return null
+
+  if (second <= 12 && first <= 31) return { year, month: second, day: first, timestamp: Date.UTC(year, second - 1, first) }
+  if (first <= 12 && second <= 31) return { year, month: first, day: second, timestamp: Date.UTC(year, first - 1, second) }
+  return null
 }
 
 function groupLots(items: Lote[]): ArchiveGroup[] {
   const groups = new Map<string, ArchiveGroup>()
+  const stamps = new Map<number, number>()
 
   items.forEach((lote) => {
     const date = lotMonth(lote)
@@ -60,14 +64,20 @@ function groupLots(items: Lote[]): ArchiveGroup[] {
     const group = groups.get(key) ?? {
       key,
       label: date ? `${MONTHS[date.month - 1]} ${date.year}` : 'Sin fecha',
-      timestamp: date?.timestamp ?? Number.NEGATIVE_INFINITY,
+      timestamp: date ? Date.UTC(date.year, date.month - 1) : Number.NEGATIVE_INFINITY,
       items: [],
     }
     group.items.push(lote)
     groups.set(key, group)
+    stamps.set(lote.id, date?.timestamp ?? 0)
   })
 
-  return Array.from(groups.values()).sort((a, b) => b.timestamp - a.timestamp)
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      items: group.items.sort((a, b) => (stamps.get(b.id) ?? 0) - (stamps.get(a.id) ?? 0) || b.nombre.localeCompare(a.nombre, 'es', { numeric: true })),
+    }))
+    .sort((a, b) => b.timestamp - a.timestamp)
 }
 
 function withOperatorLabel(lote: Lote): Lote {

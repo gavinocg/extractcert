@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import case, func
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from ..core.deps import get_current_user, require_csrf, require_supervisor
@@ -122,12 +122,17 @@ def listar(
     if user.rol == "usuario" or scope == "mine":
         q = q.join(LoteOperador).filter(LoteOperador.operador_id == user.id, LoteOperador.activo.is_(True))
     elif scope in ("supervision", "archived") and user.rol in ("supervisor", "administrador"):
-        q = q.filter(Lote.operador_id.is_not(None))
+        # Un lote con responsables activos nunca debe quedar invisible aunque
+        # falte el operador principal (inconsistencia): se incluye y se repara.
+        active_member = db.query(LoteOperador.id).filter(
+            LoteOperador.lote_id == Lote.id, LoteOperador.activo.is_(True)
+        ).exists()
+        q = q.filter(or_(Lote.operador_id.is_not(None), active_member))
     else:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bandeja no válida.")
     rows = q.order_by(Lote.assigned_at.desc(), Lote.nombre).all()
     for lote in rows:
-        if lote.estado == "notificado":
+        if lote.estado in ("notificado", "completado"):
             lote_service.sync_estado(db, lote)
     result = [lote_service.serialize(db, lote) for lote in rows]
     if scope == "mine":

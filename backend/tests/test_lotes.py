@@ -1,10 +1,11 @@
+from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.db.database import Base
-from app.db.models import Extraccion, Lote, TramiteError, User
+from app.db.models import Extraccion, Lote, LoteOperador, TramiteError, User
 from app.services import lotes as lote_service
 from app.services import notificaciones
 
@@ -133,3 +134,44 @@ def test_document_key_no_depende_de_unidad_o_unc():
     unc = lote_service.document_key(17, "//servidor/entrega/2026/lote/Certificado.pdf")
 
     assert mapped == unc
+
+
+def test_sync_estado_recupera_operador_desde_miembros_activos(tmp_path: Path, monkeypatch):
+    folder = tmp_path / "lote"
+    folder.mkdir()
+    (folder / "uno.pdf").write_bytes(b"pdf")
+
+    db = _database()
+    monkeypatch.setattr(lote_service, "raiz_origen", lambda _: str(tmp_path))
+    user = User(username="fantasma", password_hash="hash", rol="usuario", estado="activo")
+    db.add(user)
+    db.flush()
+    lote = Lote(relative_path="lote", nombre="lote", operador_id=None, estado="notificado", notified_at=datetime.now())
+    db.add(lote)
+    db.flush()
+    db.add(LoteOperador(lote_id=lote.id, operador_id=user.id, activo=True))
+    db.commit()
+
+    stats = lote_service.sync_estado(db, lote)
+
+    assert stats["pendientes"] == 1
+    assert lote.operador_id == user.id
+    assert lote.estado == "asignado"
+    assert lote.notified_at is None
+
+
+def test_sync_estado_sin_miembros_marca_sin_asignar(tmp_path: Path, monkeypatch):
+    folder = tmp_path / "lote"
+    folder.mkdir()
+    (folder / "uno.pdf").write_bytes(b"pdf")
+
+    db = _database()
+    monkeypatch.setattr(lote_service, "raiz_origen", lambda _: str(tmp_path))
+    lote = Lote(relative_path="lote", nombre="lote", operador_id=None, estado="notificado", notified_at=datetime.now())
+    db.add(lote)
+    db.commit()
+
+    lote_service.sync_estado(db, lote)
+
+    assert lote.operador_id is None
+    assert lote.estado == "sin_asignar"

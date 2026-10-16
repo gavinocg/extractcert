@@ -211,7 +211,7 @@ def operator_stats(
         version_count, recent_count = versions.get(operator.id, (0, 0))
         totals = {"total": total, "realizados": realizados, "errores": errores, "pendientes": pendientes}
         completed_lots = sum(1 for item_total, done in lots if item_total and item_total == done)
-        progress = round((totals["total"] - totals["pendientes"]) * 100 / totals["total"]) if totals["total"] else 0
+        progress = lote_service.porcentaje_avance(totals["total"], totals["pendientes"])
         result.append({
             "id": operator.id,
             "username": operator.username,

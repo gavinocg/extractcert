@@ -279,6 +279,36 @@ def test_operator_stats_no_colapsa_lotes_vacios_del_mismo_operador():
     assert stats["total"] == 0
 
 
+def test_operator_stats_avance_nunca_cien_con_pendientes():
+    db = database()
+    operator = User(username="op-pend", password_hash="x", rol="usuario", estado="activo")
+    supervisor = User(username="super", password_hash="x", rol="supervisor", estado="activo")
+    db.add_all((operator, supervisor))
+    db.flush()
+    lote = Lote(relative_path="casi", nombre="casi", operador_id=operator.id)
+    db.add(lote)
+    db.flush()
+    db.add(LoteOperador(lote_id=lote.id, operador_id=operator.id, activo=True))
+    for index in range(199):
+        db.add(LoteDocumento(lote_id=lote.id, document_key=f"k{index}", relative_path=f"{index}.pdf", nombre=f"{index}.pdf", estado="completado"))
+    db.add(LoteDocumento(lote_id=lote.id, document_key="k-pend", relative_path="pend.pdf", nombre="pend.pdf"))
+    db.commit()
+
+    stats = next(item for item in lotes_router.operator_stats(supervisor, db) if item["id"] == operator.id)
+
+    assert stats["total"] == 200
+    assert stats["pendientes"] == 1
+    assert stats["porcentaje"] == 99
+
+    pendiente = db.query(LoteDocumento).filter_by(document_key="k-pend").one()
+    pendiente.estado = "completado"
+    db.commit()
+
+    stats = next(item for item in lotes_router.operator_stats(supervisor, db) if item["id"] == operator.id)
+
+    assert stats["porcentaje"] == 100
+
+
 def test_limpieza_temporal_ejecuta_primero_y_throttlea(tmp_path, monkeypatch):
     old = tmp_path / "prev_old.pdf"
     old.write_bytes(b"pdf")

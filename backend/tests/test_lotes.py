@@ -47,6 +47,14 @@ def test_metricas_deduplica_error_y_extraccion(tmp_path: Path, monkeypatch):
     }
 
 
+def test_porcentaje_avance_nunca_redondea_a_cien_con_pendientes():
+    assert lote_service.porcentaje_avance(1692, 3) == 99
+    assert lote_service.porcentaje_avance(200, 1) == 99
+    assert lote_service.porcentaje_avance(200, 0) == 100
+    assert lote_service.porcentaje_avance(100, 40) == 60
+    assert lote_service.porcentaje_avance(0, 0) == 0
+
+
 def test_lote_dinamico_reabre_al_agregar_pdf(tmp_path: Path, monkeypatch):
     folder = tmp_path / "lote"
     folder.mkdir()

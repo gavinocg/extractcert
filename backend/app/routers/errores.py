@@ -83,12 +83,17 @@ def crear(body: ErrorIn, user: User = Depends(get_current_user), db: Session = D
     lote_service.require_member(db, lote_id, user.id)
     lote_service.validate_lease(documento, user.id, body.lease_token)
     canon = fs.normalizar(real)
+    # Huella del origen al registrar el error: valida después si el archivo
+    # sigue siendo el mismo sin depender de relojes entre servidores.
+    source_stat = os.stat(real)
     existente = db.query(TramiteError).filter(TramiteError.original_path == canon).first()
     if existente:
         existente.observacion = body.observacion.strip()
         existente.user_id = user.id
         existente.lote_id = lote_id
         existente.documento_id = documento.id
+        existente.source_size = source_stat.st_size
+        existente.source_mtime_ns = source_stat.st_mtime_ns
         documento.estado, documento.completed_by = "error", user.id
         documento.completed_at = __import__("datetime").datetime.now()
         lote_service.clear_lease(documento)
@@ -96,7 +101,7 @@ def crear(body: ErrorIn, user: User = Depends(get_current_user), db: Session = D
         lote_service.sync_estado(db, lote, lote_service.metricas_db(db, lote))
         db.commit()
         return {"ok": True, "id": existente.id}
-    e = TramiteError(original_path=canon, archivo=os.path.basename(canon), observacion=body.observacion.strip(), user_id=user.id, lote_id=lote_id, documento_id=documento.id)
+    e = TramiteError(original_path=canon, archivo=os.path.basename(canon), observacion=body.observacion.strip(), user_id=user.id, lote_id=lote_id, documento_id=documento.id, source_size=source_stat.st_size, source_mtime_ns=source_stat.st_mtime_ns)
     db.add(e)
     documento.estado, documento.completed_by = "error", user.id
     documento.completed_at = __import__("datetime").datetime.now()

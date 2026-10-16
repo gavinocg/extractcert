@@ -50,8 +50,10 @@ def dashboard(
         error_filter = error_filter | (TramiteError.lote_id == lote.id)
     rows_all = db.query(Extraccion).filter(extraction_filter).all()
     extraidos_map: dict[str, Extraccion] = {fs.filename_key(os.path.basename(fs.normalizar(r.original_path))): r for r in rows_all}
+    extraidos_por_documento: dict[int, Extraccion] = {r.documento_id: r for r in rows_all if r.documento_id is not None}
     errores_all = db.query(TramiteError).filter(error_filter).all()
     errores_map: dict[str, TramiteError] = {fs.filename_key(os.path.basename(fs.normalizar(r.original_path))): r for r in errores_all}
+    errores_por_documento: dict[int, TramiteError] = {r.documento_id: r for r in errores_all if r.documento_id is not None}
 
     pdfs = fs.listar_pdfs(conf)
 
@@ -60,8 +62,19 @@ def dashboard(
         ruta_completa = fs.normalizar(os.path.abspath(os.path.join(conf, f)))
         file_key = fs.filename_key(f)
         document = documents_by_key.get(lote_service.document_key(lote.id, ruta_completa)) if lote else None
-        reg = extraidos_map.get(file_key)
-        err = errores_map.get(file_key)
+        reg = (extraidos_por_documento.get(document.id) if document is not None else None) or extraidos_map.get(file_key)
+        err = (errores_por_documento.get(document.id) if document is not None else None) or errores_map.get(file_key)
+        if document is not None:
+            # El inventario sincronizado es la fuente de verdad: una extracción o
+            # error desactualizado (archivo reemplazado o extracción invalidada)
+            # no debe ocultar un documento pendiente de solventar.
+            if document.estado == "completado":
+                pass
+            elif document.estado == "error":
+                reg = None
+            else:
+                reg = None
+                err = None
         base_item = {
             "nombre": f,
             "ruta": ruta_completa,

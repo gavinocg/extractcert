@@ -211,6 +211,8 @@ class Extraccion(Base):
     destino_path: Mapped[str] = mapped_column(Text, nullable=False)
     pagina_inicio: Mapped[int] = mapped_column(Integer, nullable=False)
     pagina_fin: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    source_mtime_ns: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     estado: Mapped[str] = mapped_column(
         Enum("realizado", "rehecho", "modificado", name="estado"),
         default="realizado",
@@ -257,6 +259,8 @@ class TramiteError(Base):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     lote_id: Mapped[int | None] = mapped_column(ForeignKey("lotes.id", ondelete="SET NULL"), index=True, nullable=True)
     documento_id: Mapped[int | None] = mapped_column(ForeignKey("lote_documentos.id", ondelete="SET NULL"), index=True, nullable=True)
+    source_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    source_mtime_ns: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 

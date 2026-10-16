@@ -219,19 +219,31 @@ def claim_document(db: Session, documento_id: int, user_id: int) -> tuple[LoteDo
     return documento, token
 
 
+def porcentaje_avance(total: int, pendientes: int) -> int:
+    """Avance redondeado, sin mostrar 100 % mientras queden documentos pendientes.
+
+    Un redondeo normal oculta trabajo sin solventar (p. ej. 1689/1692 = 99,82 %
+    se mostraría como 100 %); el tope en 99 mantiene la cifra coherente con los
+    pendientes que lista la supervisión.
+    """
+    if total <= 0:
+        return 0
+    porcentaje = round((total - pendientes) * 100 / total)
+    return min(porcentaje, 99) if pendientes > 0 else porcentaje
+
+
 def metricas(db: Session, lote: Lote) -> dict:
     documents = [row for row in sync_documentos(db, lote) if row.presente]
     total = len(documents)
     realizados = sum(row.estado == "completado" for row in documents)
     errores = sum(row.estado == "error" for row in documents)
     pendientes = max(0, total - realizados - errores)
-    porcentaje = round((realizados + errores) * 100 / total) if total else 0
     return {
         "total": total,
         "realizados": realizados,
         "errores": errores,
         "pendientes": pendientes,
-        "porcentaje": porcentaje,
+        "porcentaje": porcentaje_avance(total, pendientes),
     }
 
 
@@ -250,7 +262,7 @@ def metricas_db(db: Session, lote: Lote | int) -> dict:
         "realizados": realizados,
         "errores": errores,
         "pendientes": pendientes,
-        "porcentaje": round((realizados + errores) * 100 / total) if total else 0,
+        "porcentaje": porcentaje_avance(total, pendientes),
     }
 
 
@@ -268,7 +280,7 @@ def metricas_directorio(db: Session, relative: str, nombre: str = "") -> dict:
     total = len(keys)
     realizados, errores = len(extracted), len(errors)
     pendientes = max(0, total - realizados - errores)
-    return {"total": total, "realizados": realizados, "errores": errores, "pendientes": pendientes, "porcentaje": round((realizados + errores) * 100 / total) if total else 0}
+    return {"total": total, "realizados": realizados, "errores": errores, "pendientes": pendientes, "porcentaje": porcentaje_avance(total, pendientes)}
 
 
 def heal_operador(db: Session, lote: Lote) -> bool:

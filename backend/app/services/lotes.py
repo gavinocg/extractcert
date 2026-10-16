@@ -81,6 +81,20 @@ def require_member(db: Session, lote_id: int, user_id: int) -> None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "El usuario no es miembro activo del lote.")
 
 
+def huella_origen_cambiada(registro: Extraccion | TramiteError, stat: os.stat_result) -> bool:
+    """¿La extracción/error ya no corresponde al archivo actual?
+
+    Con huella guardada (tamaño + mtime del origen al extraer) la comparación es
+    entre valores del propio filesystem, inmune a relojes desfasados de los
+    equipos que cargan PDFs por CIFS. Las filas antiguas sin huella conservan el
+    criterio de fechas anterior.
+    """
+    if registro.source_mtime_ns is not None and registro.source_size is not None:
+        return registro.source_mtime_ns != stat.st_mtime_ns or registro.source_size != stat.st_size
+    momento = registro.processed_at if isinstance(registro, Extraccion) else registro.updated_at
+    return bool(momento) and momento < datetime.fromtimestamp(stat.st_mtime)
+
+
 def sync_documentos(db: Session, lote: Lote) -> list[LoteDocumento]:
     if lote.id is None:
         raise ValueError("sync_documentos requiere un lote persistido")
@@ -125,13 +139,12 @@ def sync_documentos(db: Session, lote: Lote) -> list[LoteDocumento]:
         row.source_size, row.source_mtime_ns = stat.st_size, stat.st_mtime_ns
         extraction = extraction_by_document.get(row.id) or extraction_by_key.get(key)
         error = error_by_document.get(row.id) or error_by_key.get(key)
-        source_mtime = datetime.fromtimestamp(stat.st_mtime)
         if replaced:
             clear_lease(row)
             row.estado, row.completed_by, row.completed_at = "pendiente", None, None
-        if extraction and extraction.processed_at and extraction.processed_at < source_mtime:
+        if extraction and huella_origen_cambiada(extraction, stat):
             extraction = None
-        if error and error.updated_at and error.updated_at < source_mtime:
+        if error and huella_origen_cambiada(error, stat):
             error = None
         if extraction:
             extraction.documento_id = row.id

@@ -161,6 +161,9 @@ def guardar(
     backup = None
     installed = False
     committed = False
+    # Huella del origen al momento de extraer: permite validar después si el
+    # archivo sigue siendo el mismo sin depender de relojes entre servidores.
+    source_stat = os.stat(original)
     try:
         extraer_paginas(original, body.inicio, body.fin, temp_output, rotacion=rot2, orden_paginas=selected_order)
         if not os.path.isfile(temp_output) or os.path.getsize(temp_output) == 0:
@@ -179,6 +182,8 @@ def guardar(
             reg.lote_id = lote_id
             reg.processed_at = datetime.now()
             reg.destino_path = destino
+            reg.source_size = source_stat.st_size
+            reg.source_mtime_ns = source_stat.st_mtime_ns
             nuevo_id = reg.id
         else:
             db.query(Extraccion).filter(Extraccion.original_key == original_key).delete()
@@ -194,6 +199,8 @@ def guardar(
                 pagina_fin=body.fin,
                 estado=estado,
                 processed_at=datetime.now(),
+                source_size=source_stat.st_size,
+                source_mtime_ns=source_stat.st_mtime_ns,
             )
             db.add(e)
             db.flush()
